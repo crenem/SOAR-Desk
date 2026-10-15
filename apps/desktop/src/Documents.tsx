@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { extractMetadata, type MetadataCandidate, type MetadataCategory } from "./metadata";
 
 type Page = { page: number; text: string; method: string; warning: string | null };
 type Document = { document_id: string; sha256: string; pages: Page[] };
@@ -60,6 +61,7 @@ export default function Documents() {
   const [path,setPath] = useState("");
   const [document,setDocument] = useState<Document | null>(null);
   const [segments,setSegments] = useState<Segment[]>([]);
+  const [metadata,setMetadata] = useState<MetadataCandidate[]>([]);
   const [progress,setProgress] = useState("");
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState("");
@@ -70,12 +72,13 @@ export default function Documents() {
 
   async function ingest(filePath:string) {
     const run = ++generation.current;
-    setPath(filePath);setDocument(null);setSegments([]);setError("");setReview("PendingHumanReview");setReviewer("");setRationale("");
+    setPath(filePath);setDocument(null);setSegments([]);setMetadata([]);setError("");setReview("PendingHumanReview");setReviewer("");setRationale("");
     setBusy(true);setProgress("Extracting document text and performing OCR…");
     try {
       const doc = await invoke<Document>("extract_synthetic_document",{request:{path:filePath,synthetic_confirmed:true}});
       if (generation.current !== run) return;
       setDocument(doc);
+      setMetadata(extractMetadata(doc.pages));
       const chunks = doc.pages.flatMap(splitPage);
       setSegments(chunks);
       if (!chunks.length) {setError("No readable text was found. Verify the original scan and OCR installation.");return;}
@@ -104,6 +107,9 @@ export default function Documents() {
     } catch(e) {setError("Unable to select document: "+String(e));}
   }
   const summary=summarise(segments);
+  const metadataGroups: MetadataCategory[] = ["Document","Patient","Encounter","Diagnoses","Medical history","Psychiatric history","Medications","Allergies","Functional evidence"];
+  const verifiedMetadata = metadata.filter(m=>m.status==="HumanVerified").length;
+  function updateMetadata(id:string, patch:Partial<MetadataCandidate>){setMetadata(items=>items.map(m=>m.id===id?{...m,...patch,status:patch.value!==undefined?"PendingHumanReview":(patch.status??m.status)}:m)); setReview("PendingHumanReview");}
   const readyToReview=!busy && !!document && segments.length>0 && review!=="PendingHumanReview" && !!reviewer.trim() && !!rationale.trim();
   return <section className="panel" aria-label="Document intake and evidence assessment">
     <div className="eyebrow">DOCUMENT PROCESSING · SYNTHETIC TEST DATA ONLY</div>
@@ -124,6 +130,29 @@ export default function Documents() {
         <p><strong>Functional evidence:</strong> {summary.functional}</p>
         <p><strong>Review readiness:</strong> {busy ? "Processing" : summary.status}</p>
         <p className="muted">This assessment combines passage classifications, not clinical findings. It cannot establish disability, severity, duration, or eligibility. Uncertainty and conflicting classifications require human examination.</p>
+      </section>
+      <section className="review">
+        <h2>Structured metadata · source-linked proposals</h2>
+        <p className="muted">Extracted from explicit labels and section text; never inferred from diagnoses or clinical knowledge. Every proposed value starts unverified. Select an individual value to edit or reject it after checking the source.</p>
+        <p><strong>{metadata.length}</strong> candidate fields · <strong>{verifiedMetadata}</strong> human verified · <strong>{metadata.filter(m=>m.status==="PendingHumanReview").length}</strong> pending</p>
+        {metadata.length === 0 && <p>No clearly labeled fields were detected. Inspect the original document and enter necessary details manually in a later reviewed workflow; no missing values have been invented.</p>}
+        {metadataGroups.map(group=>{
+          const fields=metadata.filter(m=>m.category===group);
+          return fields.length ? <details key={group} open={group==="Patient"||group==="Diagnoses"}>
+            <summary><strong>{group}</strong> ({fields.length})</summary>
+            {fields.map(m=><fieldset key={m.id} className="question">
+              <legend>{m.field} · Page {m.page}</legend>
+              <label>Extracted value<textarea rows={2} value={m.value} onChange={e=>updateMetadata(m.id,{value:e.target.value})}/></label>
+              <p className="muted"><strong>Source passage:</strong> {m.excerpt}</p>
+              <label>Human verification<select value={m.status} onChange={e=>updateMetadata(m.id,{status:e.target.value as MetadataCandidate["status"]})} disabled={busy}>
+                <option value="PendingHumanReview">Pending human review</option>
+                <option value="HumanVerified">Verified against original record</option>
+                <option value="Rejected">Reject extracted value</option>
+              </select></label>
+            </fieldset>)}
+          </details> : null;
+        })}
+        <p className="muted">Clinical fields are candidate text excerpts, not normalized diagnoses or verified ICD-10 codes. Values and review selections are in memory only.</p>
       </section>
       <section className="review">
         <h2>Page-by-page evidence passages</h2>
