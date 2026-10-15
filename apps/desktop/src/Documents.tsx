@@ -9,7 +9,7 @@ type ModelAnswer = { choice?: string; answer_confidence?: number; probabilities?
 type LayaResult = { model: string; truncated?: boolean; document_type?: { answer?: ModelAnswer; mode?: string; model?: string; usage?: { truncated?: boolean; state_tokens_dropped?: number } }; functional_evidence?: { answer?: ModelAnswer; mode?: string; model?: string; usage?: { truncated?: boolean; state_tokens_dropped?: number } } };
 type Segment = { page: number; index: number; text: string; result?: LayaResult; error?: string };
 type QwenFinding = {category:string; value:string; quote:string; review_status:string};
-type QwenResult = {model:string; summary:string; findings:QwenFinding[]; proposed_only:boolean};
+type QwenResult = {model:string; backend?:"npu"|"cpu"; summary:string; findings:QwenFinding[]; proposed_only:boolean};
 type QwenSegment = {page:number; index:number; data?:QwenResult; error?:string};
 type Review = "PendingHumanReview" | "HumanVerified" | "Rejected" | "NeedsMoreEvidence";
 const MAX_SEGMENT = 1100;
@@ -128,6 +128,7 @@ export default function Documents() {
     } catch(e) {setError("Unable to select document: "+String(e));}
   }
   const summary=summarise(segments);
+  const inferenceBackends=[...new Set(qwen.map(item=>item.data?.backend).filter(Boolean))];
   const qwenFindings=qwen.flatMap(s=>(s.data?.findings??[]).map(f=>({...f,page:s.page,segment:s.index})));
   const qwenFailures=qwen.filter(s=>s.error).length;
   const metadataGroups: MetadataCategory[] = ["Document","Patient","Encounter","Diagnoses","Medical history","Psychiatric history","Medications","Allergies","Functional evidence"];
@@ -157,6 +158,7 @@ export default function Documents() {
       <section className="review">
         <h2>Qwen3 4B · Proposed clinical evidence summary</h2>
         <p className="muted">Locally generated, unverified and source-linked. The model must not decide SSI/SSDI eligibility. A quotation match is a basic safeguard, not proof the interpretation is accurate.</p>
+        <p><strong>Inference backend:</strong> {inferenceBackends.length ? inferenceBackends.map(b=>b==="npu"?"Windows GenieX (NPU-capable)":"Ubuntu llama.cpp (CPU)").join(", ") : (busy ? "Waiting for Qwen…" : "Not available")}</p>
         <p><strong>{qwenFindings.length}</strong> proposed clinical findings · <strong>{qwenFailures}</strong> inference errors.</p>
         {qwen.filter(s=>s.error).map(s=><p key={`${s.page}-${s.index}`} role="alert" className="error">Page {s.page}, passage {s.index}: {s.error}</p>)}
         {qwen.length===0 && <p>{busy ? "Waiting for the Laya stage to complete…" : "Qwen results not available. Start the local llama.cpp server; see docs/QWEN-LOCAL.md."}</p>}
