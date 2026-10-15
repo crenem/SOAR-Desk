@@ -1,0 +1,15 @@
+name: Local inference adapter checks
+on:
+  push:
+  pull_request:
+jobs:
+  adapters:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Python scripts and shell syntax
+        run: |
+          python3 -m py_compile workers/qwen_worker.py scripts/probe-geniex.py workers/laya_worker.py
+          bash -n scripts/launch-wsl.sh
+      - name: Test routing without network or model downloads
+        run: python3 -m unittest discover -s workers -p 'test_*.py' -v
