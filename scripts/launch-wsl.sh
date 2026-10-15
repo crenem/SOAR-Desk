@@ -56,6 +56,17 @@ if ! "$ROOT/.venv-laya/bin/python" -c "import laya" >/dev/null 2>&1; then
   "$ROOT/.venv-laya/bin/python" -m pip install 'laya>=0.3.21'
 fi
 
+# Checkpoints are downloaded once, then used offline by the document worker.
+LAYA_MARKER="$HOME/.local/state/soar-desk/laya-provisioned"
+if [[ ! -f "$LAYA_MARKER" ]]; then
+  echo "Provisioning Laya English and multilingual checkpoints (first run only)..."
+  if "$ROOT/.venv-laya/bin/python" -c 'from laya import Router; Router(device="cpu").preload(["english", "multilingual"])'; then
+    touch "$LAYA_MARKER"
+  else
+    echo "Laya model setup failed. See docs/OCR-QUICKSTART.md. Continuing with Qwen and OCR." >&2
+  fi
+fi
+
 if [[ ! -x "$LLAMA/build/bin/llama-server" ]]; then
   mkdir -p "$(dirname "$LLAMA")"
   if [[ ! -d "$LLAMA/.git" ]]; then
