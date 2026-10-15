@@ -19,3 +19,4 @@ soar-core = { path = "../../../crates/soar-core" }
 
 soar-documents = { path = "../../../crates/soar-documents" }
 serde_json = "1"
+tauri-plugin-dialog = "2"

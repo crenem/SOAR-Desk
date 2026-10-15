@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 
 type Page = { page: number; text: string; method: string; warning: string | null };
 type Document = { document_id: string; sha256: string; pages: Page[] };
@@ -16,6 +17,24 @@ export default function Documents() {
   const [rationale, setRationale] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  async function browse() {
+    setError("");
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        title: "Select a synthetic evidence document",
+        filters: [{ name: "Documents and images", extensions: ["pdf", "png", "jpg", "jpeg", "tif", "tiff"] }]
+      });
+      if (typeof selected === "string") {
+        setPath(selected);
+        setDocument(null);
+        setClassification(null);
+        setEdited({});
+        setReview("PendingHumanReview");
+      }
+    } catch (e) { setError("Could not open file picker: " + String(e)); }
+  }
   async function extract() {
     setBusy(true); setError(""); setClassification(null); setReview("PendingHumanReview"); setDocument(null); setEdited({});
     try { const result = await invoke<Document>("extract_synthetic_document", {request:{path,synthetic_confirmed:confirmed}}); setDocument(result); setPage(0); }
@@ -33,7 +52,9 @@ export default function Documents() {
     <h1>Document intake & Laya</h1>
     <p className="intro">Extract local PDF or image text, classify with Laya, and verify every suggested classification. No persistent storage or real client documents.</p>
     <label className="checkline"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} />I confirm this document is entirely synthetic and contains no real client data.</label>
-    <label>Absolute local file path<input value={path} onChange={e=>setPath(e.target.value)} placeholder="/home/user/Projects/test-data/example.pdf" /></label>
+    <label>Selected document path<input readOnly value={path} placeholder="Use Browse files to select a document" /></label>
+    <button type="button" className="secondary" disabled={busy} onClick={browse}>Browse files…</button>
+    <p className="muted">The chooser shows files accessible to this application's operating system. In WSL2, Windows drives are under /mnt/c; Linux home folders are under /home.</p>
     <button className="primary" disabled={!confirmed || !path.trim() || busy} onClick={extract}>Extract text / OCR</button>
     {error && <div role="alert" className="error"><strong>Processing unavailable</strong><p>{error}</p></div>}
     {document && <section className="review">

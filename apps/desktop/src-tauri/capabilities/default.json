@@ -1,10 +1,11 @@
 {
   "identifier": "default",
-  "description": "Minimal core Tauri permission; no filesystem or network plugins.",
+  "description": "Native open-file dialog only; no general filesystem or network plugin.",
   "windows": [
     "main"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "dialog:allow-open"
   ]
 }

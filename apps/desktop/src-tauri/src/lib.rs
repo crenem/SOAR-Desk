@@ -206,6 +206,7 @@ fn classify_synthetic_text(request: ClassifyRequest) -> Result<serde_json::Value
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text])
         .run(tauri::generate_context!())
         .expect("error starting SOAR Desk");
