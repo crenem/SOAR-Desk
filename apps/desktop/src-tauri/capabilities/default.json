@@ -1,0 +1,10 @@
+{
+  "identifier": "default",
+  "description": "Minimal core Tauri permission; no filesystem or network plugins.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default"
+  ]
+}

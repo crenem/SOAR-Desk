@@ -11,8 +11,8 @@
 - [ ] Agree security threat model and accessibility acceptance criteria
 
 ## 0.2.0 — Safe desktop alpha
-- [ ] Implement Tauri desktop shell
-- [ ] Design human-reviewed referral and case workflow UI
+- [x] Add Tauri 2 desktop shell and connected guided screening UI (in-memory synthetic-only preview)
+- [x] Provide evidence editor, review summary, and Tauri IPC bridge
 - [ ] Build encrypted local storage and locked-screen behavior
 - [ ] Create auditable case changes and encrypted backup/restore
 - [ ] Independent security and accessibility reviews
