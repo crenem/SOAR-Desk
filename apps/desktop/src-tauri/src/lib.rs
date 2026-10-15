@@ -173,10 +173,40 @@ fn validate_human_review(review: UiReview) -> Result<(), String> {
         .map_err(str::to_string)
 }
 
+
+#[derive(Deserialize)]
+struct DocumentRequest { path: String, synthetic_confirmed: bool }
+#[tauri::command]
+fn extract_synthetic_document(request: DocumentRequest) -> Result<soar_documents::ExtractedDocument, String> {
+    if !request.synthetic_confirmed { return Err("Only synthetic test documents are permitted".into()); }
+    soar_documents::extract(std::path::Path::new(&request.path))
+}
+
+#[derive(Deserialize)]
+struct ClassifyRequest { text: String, synthetic_confirmed: bool }
+#[tauri::command]
+fn classify_synthetic_text(request: ClassifyRequest) -> Result<serde_json::Value, String> {
+    use std::{io::Write, process::{Command, Stdio}};
+    if !request.synthetic_confirmed { return Err("Only synthetic test documents are permitted".into()); }
+    if request.text.len() > 80_000 { return Err("Text exceeds development limit".into()); }
+    let worker = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../workers/laya_worker.py");
+    let python = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.venv-laya/bin/python");
+    if !python.exists() { return Err("Laya is unavailable. Create .venv-laya as described in docs/OCR-QUICKSTART.md".into()); }
+    let mut child = Command::new(python).arg(worker).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .env("HF_HUB_OFFLINE", "1").env("TRANSFORMERS_OFFLINE", "1")
+        .spawn().map_err(|e| e.to_string())?;
+    let payload = serde_json::json!({"text": request.text});
+    if let Some(mut stdin) = child.stdin.take() { stdin.write_all(payload.to_string().as_bytes()).map_err(|e| e.to_string())?; }
+    let output = child.wait_with_output().map_err(|e| e.to_string())?;
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).map_err(|e| format!("Laya response: {e}"))?;
+    if !output.status.success() { return Err(parsed.get("error").and_then(|v| v.as_str()).unwrap_or("Laya classification failed").to_string()); }
+    Ok(parsed)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![evaluate_screen, validate_human_review])
+        .invoke_handler(tauri::generate_handler![evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text])
         .run(tauri::generate_context!())
         .expect("error starting SOAR Desk");
 }
