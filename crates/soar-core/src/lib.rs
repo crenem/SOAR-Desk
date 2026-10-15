@@ -77,17 +77,26 @@ mod tests {
 
     #[test]
     fn documented_referral_advances_for_human_review() {
-        assert_eq!(triage(&screen(EvidenceStatus::Documented)), TriageStatus::AdvanceForReview);
+        assert_eq!(
+            triage(&screen(EvidenceStatus::Documented)),
+            TriageStatus::AdvanceForReview
+        );
     }
 
     #[test]
     fn uncertain_referral_requests_further_assessment() {
-        assert_eq!(triage(&screen(EvidenceStatus::Unknown)), TriageStatus::FurtherAssessment);
+        assert_eq!(
+            triage(&screen(EvidenceStatus::Unknown)),
+            TriageStatus::FurtherAssessment
+        );
     }
 
     #[test]
     fn clearly_unsupported_referral_is_not_automatically_rejected() {
-        assert_eq!(triage(&screen(EvidenceStatus::NotSupported)), TriageStatus::ReviewServiceFit);
+        assert_eq!(
+            triage(&screen(EvidenceStatus::NotSupported)),
+            TriageStatus::ReviewServiceFit
+        );
     }
 
     #[test]
