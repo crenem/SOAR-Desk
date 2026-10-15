@@ -203,11 +203,40 @@ fn classify_synthetic_text(request: ClassifyRequest) -> Result<serde_json::Value
     Ok(parsed)
 }
 
+
+#[derive(Deserialize)]
+struct QwenRequest { text: String, synthetic_confirmed: bool }
+#[tauri::command]
+fn extract_qwen_candidates(request: QwenRequest) -> Result<serde_json::Value, String> {
+    use std::{io::Write, process::{Command, Stdio}};
+    if !request.synthetic_confirmed { return Err("Synthetic-only preview: real patient records are prohibited".into()); }
+    if request.text.is_empty() || request.text.len() > 5000 { return Err("Qwen passage must contain 1–5,000 characters".into()); }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let worker = root.join("workers/qwen_worker.py");
+    // Prefer the existing virtual environment. It supplies a Python interpreter, not an online API.
+    let venv_python = root.join(".venv-laya/bin/python");
+    let python = if venv_python.exists() { venv_python.to_string_lossy().to_string() } else { "python3".into() };
+    let mut child = Command::new(python).arg(worker)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .spawn().map_err(|e| format!("Qwen worker startup: {e}"))?;
+    let payload = serde_json::json!({"text":request.text});
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(payload.to_string().as_bytes()).map_err(|e| e.to_string())?;
+    }
+    let output = child.wait_with_output().map_err(|e| e.to_string())?;
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|e| format!("Qwen worker returned an invalid response: {e}"))?;
+    if !output.status.success() {
+        return Err(parsed.get("error").and_then(|v| v.as_str()).unwrap_or("Qwen worker failed").to_string());
+    }
+    Ok(parsed)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text])
+        .invoke_handler(tauri::generate_handler![evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text, extract_qwen_candidates])
         .run(tauri::generate_context!())
         .expect("error starting SOAR Desk");
 }
