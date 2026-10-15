@@ -67,45 +67,56 @@ if [[ ! -f "$LAYA_MARKER" ]]; then
   fi
 fi
 
-if [[ ! -x "$LLAMA/build/bin/llama-server" ]]; then
-  mkdir -p "$(dirname "$LLAMA")"
-  if [[ ! -d "$LLAMA/.git" ]]; then
-    git clone --depth 1 https://github.com/ggml-org/llama.cpp.git "$LLAMA"
+server_pid=""
+if python3 "$ROOT/scripts/probe-geniex.py"; then
+  echo "Windows GenieX GGUF model responded successfully from WSL2."
+  echo "NPU backend preferred. Skipping Linux CPU model startup to conserve memory."
+  export SOAR_QWEN_BACKEND=auto
+else
+  echo "GenieX not reachable or incompatible from WSL2; retaining local CPU backend."
+  export SOAR_QWEN_BACKEND=cpu
+  if [[ ! -x "$LLAMA/build/bin/llama-server" ]]; then
+    mkdir -p "$(dirname "$LLAMA")"
+    if [[ ! -d "$LLAMA/.git" ]]; then
+      git clone --depth 1 https://github.com/ggml-org/llama.cpp.git "$LLAMA"
+    fi
+    cmake -S "$LLAMA" -B "$LLAMA/build" -DCMAKE_BUILD_TYPE=Release
+    cmake --build "$LLAMA/build" --target llama-server -j 4
   fi
-  cmake -S "$LLAMA" -B "$LLAMA/build" -DCMAKE_BUILD_TYPE=Release
-  cmake --build "$LLAMA/build" --target llama-server -j 4
+  
+  # llama.cpp downloads its GGUF automatically on the first run, then caches it.
+  # Check for an already-running *healthy* local service, not just an open port.
+  server_pid=""
+  if curl -fsS --max-time 2 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
+    echo "Existing local model service detected on port $PORT."
+  else
+    if (echo >/dev/tcp/127.0.0.1/$PORT) >/dev/null 2>&1; then
+      echo "Port $PORT is in use by an unknown service; refusing to reuse it." >&2; exit 1
+    fi
+    echo "Starting local Qwen3 4B server (first launch downloads model weights)..."
+    "$LLAMA/build/bin/llama-server" -hf "$MODEL_REPO" --host 127.0.0.1 \
+      --port "$PORT" -c 2048 -ngl 0 >"$LOG" 2>&1 &
+    server_pid=$!
+    for ((i=0; i<900; i++)); do
+      if curl -fsS --max-time 2 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
+        echo "Qwen server is ready."
+        break
+      fi
+      if ! kill -0 "$server_pid" 2>/dev/null; then
+        echo "Qwen server stopped. Last log lines:" >&2
+        tail -n 35 "$LOG" >&2
+        exit 1
+      fi
+      if (( i == 899 )); then
+        echo "Model setup timed out. Check $LOG" >&2
+        exit 1
+      fi
+      sleep 1
+    done
+  fi
+  
 fi
 
-# llama.cpp downloads its GGUF automatically on the first run, then caches it.
-# Check for an already-running *healthy* local service, not just an open port.
-server_pid=""
-if curl -fsS --max-time 2 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
-  echo "Existing local model service detected on port $PORT."
-else
-  if (echo >/dev/tcp/127.0.0.1/$PORT) >/dev/null 2>&1; then
-    echo "Port $PORT is in use by an unknown service; refusing to reuse it." >&2; exit 1
-  fi
-  echo "Starting local Qwen3 4B server (first launch downloads model weights)..."
-  "$LLAMA/build/bin/llama-server" -hf "$MODEL_REPO" --host 127.0.0.1 \
-    --port "$PORT" -c 2048 -ngl 0 >"$LOG" 2>&1 &
-  server_pid=$!
-  for ((i=0; i<900; i++)); do
-    if curl -fsS --max-time 2 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
-      echo "Qwen server is ready."
-      break
-    fi
-    if ! kill -0 "$server_pid" 2>/dev/null; then
-      echo "Qwen server stopped. Last log lines:" >&2
-      tail -n 35 "$LOG" >&2
-      exit 1
-    fi
-    if (( i == 899 )); then
-      echo "Model setup timed out. Check $LOG" >&2
-      exit 1
-    fi
-    sleep 1
-  done
-fi
 cleanup() {
   if [[ -n "$server_pid" ]]; then kill "$server_pid" 2>/dev/null || true; fi
 }
