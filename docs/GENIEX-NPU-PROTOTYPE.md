@@ -33,3 +33,10 @@ The existing Qwen worker uses `127.0.0.1:8080` for the Ubuntu CPU llama.cpp serv
 Only after the Windows NPU model and local server have been verified should we add an authenticated, loopback-only Windows↔WSL transport (e.g. tested mirrored networking or a tightly scoped local IPC bridge) and enable NPU-first routing in SOAR Desk. Until then the one-click launcher must continue to run the existing **CPU fallback** unchanged.
 
 No real clinical information, PHI, SSNs, or production records during this prototype.
+
+## Observed on Windows ARM64 (October 2026)
+
+The `ai-hub-models/Qwen3-4B-Instruct-2507` QAIRT W4A16 bundle downloads correctly but can crash on model initialization with Windows exception `0xc00000fd` (stack overflow) at `geniex_llm_create` on Snapdragon X. See [upstream GenieX issue #1471](https://github.com/qualcomm/GenieX/issues/1471) and [issue #1509](https://github.com/qualcomm/GenieX/issues/1509), the latter specifically documenting slow QAIRT bundle decode on Snapdragon X X1-26-100.
+
+The repository's `scripts/test-geniex-windows.ps1` now tests the alternative `unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_0` on `--compute npu` (llama.cpp Hexagon backend), **not** the crashing QAIRT bundle. The alternative requires a separate approximately 2.38 GB GGUF download and must be confirmed with a live hardware test; it is not verified solely by successful compilation or download. Before testing, shut down the resource-intensive WSL SOAR Desk session if it is running, using `wsl --shutdown`. Do not enable automatic NPU-first routing until the GGUF hardware test succeeds and local interprocess communication has been validated.
+
