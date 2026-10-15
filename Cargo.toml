@@ -1,0 +1,9 @@
+[workspace]
+members = ["crates/soar-core"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "AGPL-3.0-only"
+repository = "https://github.com/crenem/SOAR-Desk"
+rust-version = "1.78"
