@@ -45,6 +45,30 @@ class AdapterTests(unittest.TestCase):
                     _, backend, _ = worker.request_model("synthetic")
         self.assertEqual(backend, "cpu")
 
+    def test_empty_geniex_output_falls_back_to_cpu(self):
+        from urllib.parse import urlparse
+        fake = {"choices": [{"message": {"content": '{"summary":"test","findings":[]}'}}]}
+        calls = []
+        def respond(url, body=None, timeout=None):
+            calls.append((url, body))
+            if urlparse(url).port == 18181:
+                return {"choices": [{"finish_reason": "length", "message": {"content": ""}}]}
+            return fake
+        with patch.dict(os.environ, {"SOAR_QWEN_BACKEND": "auto"}):
+            with patch.object(worker, "geniex_model", return_value=worker.NPU_MODEL_PREFIX):
+                with patch.object(worker, "local_json", side_effect=respond):
+                    _, backend, _ = worker.request_model("synthetic")
+        self.assertEqual(backend, "cpu")
+        self.assertIs(calls[0][1]["enable_think"], False)
+
+    def test_invalid_npu_json_does_not_claim_success(self):
+        fake = {"choices": [{"message": {"content": "This is not JSON"}}]}
+        with patch.dict(os.environ, {"SOAR_QWEN_BACKEND": "npu"}):
+            with patch.object(worker, "geniex_model", return_value=worker.NPU_MODEL_PREFIX):
+                with patch.object(worker, "local_json", return_value=fake):
+                    with self.assertRaises(RuntimeError):
+                        worker.request_model("synthetic")
+
     def test_invalid_model_json_rejected(self):
         with self.assertRaises(ValueError):
             worker.parse_content('{"findings":"not a list"}')
