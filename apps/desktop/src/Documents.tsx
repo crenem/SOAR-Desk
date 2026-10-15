@@ -128,7 +128,7 @@ export default function Documents() {
       <section className="review">
         <h2>Page-by-page evidence passages</h2>
         <p className="muted">Each passage retains its original page number. Expand to check the extracted wording against the actual source PDF.</p>
-        {segments.map((s,i)=><details key={`${s.page}-${s.index}`} style={{marginBottom:"0.75rem"}}>
+        {segments.map(s=><details key={`${s.page}-${s.index}`} style={{marginBottom:"0.75rem"}}>
           <summary><strong>Page {s.page}, passage {s.index}</strong> — {s.error ? "Classification unavailable" : s.result ? (TYPE_LABELS[s.result.document_type?.answer?.choice ?? ""] ?? "Classification uncertain") : "Awaiting analysis"}</summary>
           <p style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{s.text}</p>
           {s.result && <>
