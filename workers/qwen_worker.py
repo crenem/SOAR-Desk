@@ -21,7 +21,12 @@ Use an exact verbatim quote from the original text for EACH finding. If source l
 Do not infer severity, disability eligibility, ICD codes, or causal relationships. Differentiate reported vs observed in value wording. At most 8 findings per passage. Summary is only a proposed unverified description."""
 
 # No ambient HTTP proxies; no arbitrary user-configurable inference endpoints.
-OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+class RefuseRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ValueError("Inference redirects are prohibited")
+
+
+OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), RefuseRedirect())
 
 
 def local_json(url, body=None, timeout=10):
