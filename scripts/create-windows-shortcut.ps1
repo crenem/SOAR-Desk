@@ -6,6 +6,10 @@ $cmd = Join-Path $launcherDir 'Launch SOAR Desk.cmd'
 @'
 @echo off
 title SOAR Desk
+rem Start Ubuntu so Windows can resolve the repository through the WSL UNC share.
+wsl.exe -d Ubuntu-24.04 -- /bin/true
+rem Prefer the native Windows GenieX service when installed; never block CPU fallback.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "\\wsl.localhost\Ubuntu-24.04\home\jseaux\Projects\SOAR-Desk\scripts\start-geniex-windows.ps1"
 wsl.exe -d Ubuntu-24.04 --cd /home/jseaux/Projects/SOAR-Desk -- bash -lc "bash scripts/launch-wsl.sh"
 if errorlevel 1 (
  echo.
