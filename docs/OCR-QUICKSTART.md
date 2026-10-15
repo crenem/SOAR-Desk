@@ -45,3 +45,20 @@ env -u HF_HUB_OFFLINE -u TRANSFORMERS_OFFLINE \
 \`\`\`
 
 This download should use only model files, not client documents. Later classifications are offline and use the cached weights. If you need multilingual classification, separately preload the multilingual checkpoint.
+
+
+## Long-context Laya (8,192-token window)
+
+The document classifier selects English for short passages and multilingual with max_len=8192 for longer passages. Questions run separately. If Laya reports truncation or dropped state tokens, it retries with overlapping 512-token windows (384-token stride), or returns an error if the result is still incomplete.
+
+Provision the multilingual checkpoint once, using the same local virtual environment:
+
+```bash
+cd ~/Projects/SOAR-Desk
+.venv-laya/bin/python -m pip install -U 'laya>=0.3.21'
+env -u HF_HUB_OFFLINE -u TRANSFORMERS_OFFLINE \
+  .venv-laya/bin/python -c \
+  'from laya import Router; Router(device="cpu").preload(["multilingual"]); print("Multilingual model ready")'
+```
+
+Provisioning downloads model files once. Normal document classification stays offline. ARM64 memory and model accuracy require local verification. All results are proposals requiring human review.
