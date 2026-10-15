@@ -17,12 +17,12 @@
 - [ ] Create auditable case changes and encrypted backup/restore
 - [ ] Independent security and accessibility reviews
 
-## Next sprint — Document import, OCR & optional Laya classification
+## Next sprint — Document import, OCR & integrated local Laya classification
 - [ ] Implement local PDF/image import with per-page provenance and file validation
 - [ ] Install/detect Tesseract 5, Leptonica, and Poppler rendering dependencies
 - [ ] Implement embedded-text extraction and selective OCR of scanned pages
 - [ ] Add side-by-side source review and correction for synthetic documents
-- [ ] Prototype optional offline Laya classification with human approval
+- [ ] Integrate offline Laya classification as a first-class module with mandatory human approval
 - [ ] Test on fully synthetic documents, including malformed and low-quality files
 - [ ] See [sprint specification](SPRINT-DOCUMENT-OCR.md)
 
