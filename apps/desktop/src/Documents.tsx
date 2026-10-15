@@ -8,6 +8,9 @@ type Document = { document_id: string; sha256: string; pages: Page[] };
 type ModelAnswer = { choice?: string; answer_confidence?: number; probabilities?: Record<string,number>; confidence?: number; noul?: number };
 type LayaResult = { model: string; truncated?: boolean; document_type?: { answer?: ModelAnswer; mode?: string; model?: string; usage?: { truncated?: boolean; state_tokens_dropped?: number } }; functional_evidence?: { answer?: ModelAnswer; mode?: string; model?: string; usage?: { truncated?: boolean; state_tokens_dropped?: number } } };
 type Segment = { page: number; index: number; text: string; result?: LayaResult; error?: string };
+type QwenFinding = {category:string; value:string; quote:string; review_status:string};
+type QwenResult = {model:string; summary:string; findings:QwenFinding[]; proposed_only:boolean};
+type QwenSegment = {page:number; index:number; data?:QwenResult; error?:string};
 type Review = "PendingHumanReview" | "HumanVerified" | "Rejected" | "NeedsMoreEvidence";
 const MAX_SEGMENT = 1100;
 const TYPE_LABELS: Record<string,string> = {
@@ -62,6 +65,7 @@ export default function Documents() {
   const [document,setDocument] = useState<Document | null>(null);
   const [segments,setSegments] = useState<Segment[]>([]);
   const [metadata,setMetadata] = useState<MetadataCandidate[]>([]);
+  const [qwen,setQwen] = useState<QwenSegment[]>([]);
   const [progress,setProgress] = useState("");
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState("");
@@ -72,7 +76,7 @@ export default function Documents() {
 
   async function ingest(filePath:string) {
     const run = ++generation.current;
-    setPath(filePath);setDocument(null);setSegments([]);setMetadata([]);setError("");setReview("PendingHumanReview");setReviewer("");setRationale("");
+    setPath(filePath);setDocument(null);setSegments([]);setMetadata([]);setQwen([]);setError("");setReview("PendingHumanReview");setReviewer("");setRationale("");
     setBusy(true);setProgress("Extracting document text and performing OCR…");
     try {
       const doc = await invoke<Document>("extract_synthetic_document",{request:{path:filePath,synthetic_confirmed:true}});
@@ -93,7 +97,24 @@ export default function Documents() {
         } catch(e) {output[i]={...chunks[i],error:String(e)};}
         if (generation.current === run) setSegments([...output]);
       }
-      setProgress("Document-wide assessment prepared; human verification required.");
+      setProgress("Laya complete. Extracting proposed clinical findings with Qwen3 4B…");
+      const extracted: QwenSegment[] = [];
+      for (let i=0;i<chunks.length;i++) {
+        if (generation.current !== run) return;
+        setProgress(`Qwen3 4B: passage ${i+1} of ${chunks.length} (page ${chunks[i].page})…`);
+        try {
+          const data=await invoke<QwenResult>("extract_qwen_candidates",{request:{text:chunks[i].text,synthetic_confirmed:true}});
+          extracted.push({page:chunks[i].page,index:chunks[i].index,data});
+        } catch(e) {
+          extracted.push({page:chunks[i].page,index:chunks[i].index,error:String(e)});
+          // Do not repeatedly call an unavailable model server for every passage.
+          if (String(e).includes("not available on 127.0.0.1:8080")) {
+            setQwen([...extracted]);break;
+          }
+        }
+        if (generation.current===run)setQwen([...extracted]);
+      }
+      setProgress("Document assessment ready. All model-generated findings require human review.");
     } catch(e) {if (generation.current === run) setError(String(e));}
     finally {if (generation.current === run) setBusy(false);}
   }
@@ -107,6 +128,8 @@ export default function Documents() {
     } catch(e) {setError("Unable to select document: "+String(e));}
   }
   const summary=summarise(segments);
+  const qwenFindings=qwen.flatMap(s=>(s.data?.findings??[]).map(f=>({...f,page:s.page,segment:s.index})));
+  const qwenFailures=qwen.filter(s=>s.error).length;
   const metadataGroups: MetadataCategory[] = ["Document","Patient","Encounter","Diagnoses","Medical history","Psychiatric history","Medications","Allergies","Functional evidence"];
   const verifiedMetadata = metadata.filter(m=>m.status==="HumanVerified").length;
   function updateMetadata(id:string, patch:Partial<MetadataCandidate>){setMetadata(items=>items.map(m=>m.id===id?{...m,...patch,status:patch.value!==undefined?"PendingHumanReview":(patch.status??m.status)}:m)); setReview("PendingHumanReview");}
@@ -130,6 +153,22 @@ export default function Documents() {
         <p><strong>Functional evidence:</strong> {summary.functional}</p>
         <p><strong>Review readiness:</strong> {busy ? "Processing" : summary.status}</p>
         <p className="muted">This assessment combines passage classifications, not clinical findings. It cannot establish disability, severity, duration, or eligibility. Uncertainty and conflicting classifications require human examination.</p>
+      </section>
+      <section className="review">
+        <h2>Qwen3 4B · Proposed clinical evidence summary</h2>
+        <p className="muted">Locally generated, unverified and source-linked. The model must not decide SSI/SSDI eligibility. A quotation match is a basic safeguard, not proof the interpretation is accurate.</p>
+        <p><strong>{qwenFindings.length}</strong> proposed clinical findings · <strong>{qwenFailures}</strong> inference errors.</p>
+        {qwen.filter(s=>s.error).map(s=><p key={`${s.page}-${s.index}`} role="alert" className="error">Page {s.page}, passage {s.index}: {s.error}</p>)}
+        {qwen.length===0 && <p>{busy ? "Waiting for the Laya stage to complete…" : "Qwen results not available. Start the local llama.cpp server; see docs/QWEN-LOCAL.md."}</p>}
+        {qwenFindings.length===0 && qwen.length>0 && <p>No verifiable quoted findings returned. Inspect the original document; do not infer that no clinical evidence exists.</p>}
+        {Array.from(new Set(qwenFindings.map(f=>f.category))).map(category=><details key={category} open={category==="diagnosis"||category==="functional_limitation"}>
+          <summary><strong>{category.replace(/_/g," ")}</strong> ({qwenFindings.filter(f=>f.category===category).length})</summary>
+          {qwenFindings.filter(f=>f.category===category).map((f,i)=><div className="question" key={`${f.page}-${f.segment}-${i}`}>
+            <p><strong>Page {f.page}, passage {f.segment}:</strong> {f.value}</p>
+            <blockquote style={{whiteSpace:"pre-wrap"}}>{f.quote}</blockquote>
+            <p className="muted">Pending human review — confirm the proposed interpretation against the original PDF.</p>
+          </div>)}
+        </details>)}
       </section>
       <section className="review">
         <h2>Structured metadata · source-linked proposals</h2>
