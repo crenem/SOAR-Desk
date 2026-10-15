@@ -76,7 +76,19 @@ def request_model(text):
             }
             if backend == "cpu":
                 payload["response_format"] = {"type": "json_object"}
-            return local_json(base + "/chat/completions", payload, timeout=180), backend, model
+            else:
+                # Qualcomm's GenieX OpenAI endpoint supports disabling Qwen thinking.
+                # The extraction budget should go to source-linked JSON, not reasoning.
+                payload["enable_think"] = False
+            result = local_json(base + "/chat/completions", payload, timeout=180)
+            choices = result.get("choices") or []
+            message = choices[0].get("message") if choices else None
+            if not isinstance(message, dict) or not str(message.get("content") or "").strip():
+                reason = choices[0].get("finish_reason", "unknown") if choices else "no_choices"
+                raise ValueError(f"Empty model output (finish_reason={reason})")
+            # Reject unusable model responses before claiming successful inference.
+            parse_content(message["content"])
+            return result, backend, model
         except (urllib.error.URLError, TimeoutError, ValueError, KeyError) as exc:
             errors.append(backend + ": " + str(exc))
     raise RuntimeError("Local Qwen inference unavailable. " + "; ".join(errors))
