@@ -1,9 +1,11 @@
 # Roadmap
 
-## 0.1.0 — Open foundation
+## 0.1.0 — Open foundation and referral screening
 - [x] Open-source charter and licensing
 - [x] Rust workspace and initial triage types
 - [x] Synthetic-only test fixtures and CI baseline
+- [x] Implement evidence-linked screening data model and reviewable recommendation engine
+- [x] Specify human service-decision record
 - [ ] Validate referral-screening workflow with practitioners
 - [ ] Catalog SSA forms with version and authority metadata
 - [ ] Agree security threat model and accessibility acceptance criteria
