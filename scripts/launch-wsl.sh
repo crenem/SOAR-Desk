@@ -8,22 +8,21 @@ PORT=8080
 mkdir -p "$HOME/.local/state/soar-desk"
 LOG="$HOME/.local/state/soar-desk/llama-server.log"
 cd "$ROOT"
-echo "== SOAR Desk | update, setup, launch =="
-
-# Never reset or overwrite developer work.
-if git diff --quiet && git diff --cached --quiet; then
-  if git fetch origin main; then
-    if ! git merge --ff-only origin/main; then
-      echo "Cannot fast-forward; leaving files untouched." >&2; exit 1
+# Synchronize once, then execute the newly fetched launcher without a second fetch.
+if [[ "${SOAR_LAUNCH_UPDATED:-0}" != 1 ]]; then
+  echo "== SOAR Desk | update, setup, launch =="
+  if git diff --quiet && git diff --cached --quiet; then
+    if git fetch origin main; then
+      if ! git merge --ff-only origin/main; then
+        echo "Cannot fast-forward; leaving files untouched." >&2
+        exit 1
+      fi
+    else
+      echo "GitHub unreachable; using checked-out revision."
     fi
   else
-    echo "GitHub unreachable; using checked-out revision."
+    echo "Local tracked modifications found; skipping Git update."
   fi
-else
-  echo "Local tracked modifications found; skipping Git update."
-fi
-# Reload updated copy after a successful update only on the first invocation.
-if [[ "${SOAR_LAUNCH_UPDATED:-0}" != 1 ]]; then
   SOAR_LAUNCH_UPDATED=1 exec bash "$ROOT/scripts/launch-wsl.sh"
 fi
 
