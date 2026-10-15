@@ -8,8 +8,8 @@ Local-first Windows desktop using Tauri 2 (Rust) with React/TypeScript UI. Platf
 2. `soar-workflow` — versioned, sourced, configurable workflow rules.
 3. `soar-storage` — interfaces for SQLite-based local storage, schema migrations.
 4. `soar-documents` — encrypted vault and provenance-aware evidence exports.
-5. `apps/desktop` — Tauri desktop shell; UI may not bypass domain validation.
-6. `apps/server` (future) — authenticated API and tenant isolation.
+5. `soar-classify` — local Laya inference bridge, structured proposals, confidence, source-span citations, and human review state machine. The Laya runtime is a first-class supported dependency, but an unavailable model must not break OCR or force remote inference.\n6. `apps/desktop` — Tauri desktop shell; UI may not bypass domain validation.
+7. `apps/server` (future) — authenticated API and tenant isolation.
 
 ## Security gates before handling production data
 - Threat model and approved data classification.
@@ -18,6 +18,9 @@ Local-first Windows desktop using Tauri 2 (Rust) with React/TypeScript UI. Platf
 - Secure secrets/key lifecycle, permission boundaries, tamper-evident audit trail.
 - Retention and incident-response procedures; restore-tested backups.
 - Accessibility and security reviews; organizational deployment approval.
+
+## AI decision boundary
+OCR output and Laya classifications are unverified proposals. Only an explicit, auditable human action may convert a finding to accepted evidence; only a human may record a program-service decision. Record source page and span, model/version, the original proposal, reviewer corrections, and decision rationale. Inference stays local with no telemetry or cloud fallback. Include a visibly degraded mode if Laya fails; never fabricate a classification.
 
 ## Rules engine
 Every actionable rule records: originating authority, citation/URL, effective date, review date, jurisdiction, whether binding or recommended, and an agency override policy. Never confuse internal SOAR targets with SSA statutory/regulatory deadlines.
