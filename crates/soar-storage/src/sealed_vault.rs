@@ -297,6 +297,42 @@ pub fn seal_synthetic_case(
     serde_json::to_vec(&env).map_err(|_| VaultCryptoError::CorruptEnvelope)
 }
 
+/// The desktop keeps an opaque, zeroized VMK in native process memory for
+/// interval autosave. No passphrase is stored after setup/unlock. A fresh
+/// authenticated nonce is generated for every saved snapshot.
+pub struct UnlockedSession {
+    envelope: Envelope,
+    master: Zeroizing<[u8; 32]>,
+}
+
+impl UnlockedSession {
+    pub fn encrypt_update(&mut self, snapshot_json: &[u8]) -> Result<Vec<u8>, VaultCryptoError> {
+        valid_case(snapshot_json)?;
+        let case: serde_json::Value = serde_json::from_slice(snapshot_json)
+            .map_err(|_| VaultCryptoError::InvalidSyntheticPayload)?;
+        if case.get("case_reference").and_then(|v| v.as_str())
+            != Some(self.envelope.vault_id.as_str()) {
+            return Err(VaultCryptoError::InvalidSyntheticPayload);
+        }
+        self.envelope.payload = encrypt_block(
+            &self.master,
+            snapshot_json,
+            &aad(&self.envelope.vault_id, "payload"),
+        )?;
+        serde_json::to_vec(&self.envelope).map_err(|_| VaultCryptoError::CorruptEnvelope)
+    }
+}
+
+pub fn unlock_for_autosave(
+    sealed: &[u8],
+    practitioner_passphrase: &str,
+) -> Result<(Zeroizing<Vec<u8>>, UnlockedSession), VaultCryptoError> {
+    let envelope = parse_envelope(sealed)?;
+    let master = unlock_master(&envelope, SlotRole::Practitioner, practitioner_passphrase)?;
+    let plaintext = payload_from_master(&envelope, &master)?;
+    Ok((plaintext, UnlockedSession { envelope, master }))
+}
+
 /// Routine unlock never accepts the organizational recovery credential.
 pub fn open_practitioner(
     sealed: &[u8],
@@ -432,6 +468,22 @@ mod tests {
         assert_eq!(open_practitioner(&two, NEXT_ORG).unwrap_err(), VaultCryptoError::AuthenticationFailed);
         assert!(open_practitioner(&one, OP).is_ok()); // old copies need retirement
     }
+    #[test]
+    fn native_session_autosave_reencrypts_without_storing_password() {
+        let original = seal_synthetic_case(&test_case(), OP, ORG).unwrap();
+        let (_, mut session) = unlock_for_autosave(&original, OP).unwrap();
+        let mut changed:serde_json::Value=serde_json::from_slice(&test_case()).unwrap();
+        changed["answers"]["person.name"]["value"] = serde_json::json!("Fictional Another Name");
+        let revised = session.encrypt_update(changed.to_string().as_bytes()).unwrap();
+        assert_ne!(original, revised);
+        let restored=open_practitioner(&revised,OP).unwrap();
+        let after:serde_json::Value=serde_json::from_slice(&restored).unwrap();
+        assert_eq!(after["answers"]["person.name"]["value"],"Fictional Another Name");
+        assert!(open_practitioner(&revised, ORG).is_err());
+        changed["case_reference"]=serde_json::json!("SYN-OTHER-CASE");
+        assert_eq!(session.encrypt_update(changed.to_string().as_bytes()),Err(VaultCryptoError::InvalidSyntheticPayload));
+    }
+
     #[test]
     fn invalid_secrets_and_payloads_fail_closed() {
         assert_eq!(seal_synthetic_case(&test_case(), OP, OP), Err(VaultCryptoError::EqualPassphrases));
