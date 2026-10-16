@@ -56,7 +56,9 @@ export default function EvidenceRegister({evidence,setEvidence,syntheticOnly=tru
   <div className="eyebrow">CASE-SPECIFIC SOURCE REFERENCES</div>
   <h2>Evidence register</h2>
   <p className="muted">Record locally indexed source references that can be linked to individual form answers. For a linked answer, enter the exact <strong>{syntheticOnly?"SYN-EV-...":"EV-..."}</strong> identifier in its <strong>Answer source and review</strong> field. A registered source is not proof that a clinical interpretation is correct.</p>
-  <p className="hint"><strong>Important:</strong> This is a metadata-only index. No PDF bytes or extracted clinical content are attached, transmitted, or saved. Laya/Qwen findings are not imported automatically. Human verification must occur outside the model's output.</p>
+  <p className="hint"><strong>Original documents:</strong> With an unlocked writable vault, attach a PDF or image as a separate encrypted blob. The original source file remains at its original location. Encrypted blobs can be included in the case backup. Model findings still require independent human review.</p>
+  {error&&<p className="error" role="alert">{error}</p>}
+  {notice&&<p className="success" role="status">{notice}</p>}
   {evidence.length===0&&<p className="muted">No evidence source references registered yet.</p>}
   {evidence.map(e=><fieldset key={e.id} className="intake-repeat">
    <legend>{e.id} · {e.title||"New evidence source"}</legend>
