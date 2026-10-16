@@ -52,7 +52,7 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
      const next=Math.max(0,...items.map(e=>Number(e.id.match(new RegExp("^"+prefix+"(\\d+)$"))?.[1]||0)))+1;
      return [...items,{
        id:prefix+String(next).padStart(4,"0"),title:attached.original_name,
-       kind:"medical",location:"",note:"Original source imported from Document evidence; pending human review.",
+       kind:"other",location:"",note:"Original source imported from Document evidence; classify and verify against the original.",
        status:"pending",reviewer:"",blobId:attached.blob_id,
        originalFilename:attached.original_name,sha256:attached.sha256,bytes:attached.bytes
      }];
