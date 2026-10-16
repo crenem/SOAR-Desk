@@ -60,3 +60,15 @@
 .submit-resources strong,.submit-resources p{flex-basis:100%;margin:0}
 .submit-resources a{font-size:13px;color:#14577a;font-weight:650}
 @media(max-width:650px){.submit-summary{grid-template-columns:1fr}.adapter-row,.submission-record .rowheader{align-items:flex-start;flex-direction:column}.adapter-row small{text-align:left;max-width:100%}.submission-state{white-space:normal}}
+
+
+/* Synthetic application package export and source-linked review */
+.draft-form-overview{display:flex;flex-direction:column;gap:0;border:1px solid #dbe5eb;border-radius:9px;margin:13px 0 25px}
+.draft-form-line{padding:13px 15px;border-bottom:1px solid #dbe5eb;display:flex;align-items:flex-start;justify-content:space-between;gap:14px;font-size:13px}
+.draft-form-line:last-child{border-bottom:0}
+.draft-form-line .hint{margin:6px 0 0}
+.draft-form-line span{font-size:12px;color:#5a7281;text-align:right;white-space:nowrap}
+.draft-form-line a{color:#14577a}
+.draft-ack{margin:22px 0;padding:16px;background:#f5f9fa;border:1px solid #cbdbe3;border-radius:9px;line-height:1.6}
+.draft-ack input{flex-shrink:0}
+@media(max-width:650px){.draft-form-line{flex-direction:column}.draft-form-line span{text-align:left}}
