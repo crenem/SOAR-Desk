@@ -147,8 +147,8 @@ form("SSA-16","Disability Insurance Application","09-2025",7,"https://www.ssa.go
  ]},
  {id:"signature",title:"Applicant attestation, payment and address",pages:"5",questions:[
  q("ssdi.remarks","Remarks","Item-numbered explanations and continuation notes","long"),
- q("person.phone","Telephone","Daytime telephone"),q("person.mail","Mailing address"),
- q("ssdi.residence","Residence different from mailing address (if applicable)"),
+ q("person.phone","Telephone","Daytime telephone"),q("person.mail","Mailing address","Applicant mailing address"),
+ q("ssdi.residence","Residence address","Residence different from mailing address (if applicable)"),
  choose("ssdi.depositChoice","Direct deposit","Payment method",["checking","savings","direct_express","direct_deposit_refused"]),
  q("ssdi.depositDetails","Direct deposit","Routing/account information — synthetic only; do not enter real bank credentials","long"),
  choose("ssdi.signatureStatus","Applicant signature","Physical applicant signature status",["not_requested","awaiting_ink_signature","signed_on_paper","needs_review"]),
