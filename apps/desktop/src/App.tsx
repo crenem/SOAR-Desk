@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Documents from "./Documents";
 import ApplicationWorkspace from "./ApplicationWorkspace";
+import type {PrefillSuggestion} from "./document-prefill";
 import { invoke } from "@tauri-apps/api/core";
 
 type Status = "Documented" | "Reported" | "Unknown" | "NotSupported";
@@ -27,6 +28,8 @@ const friendlyDomain: Record<Domain,string> = { Physical: "Physical abilities", 
 export default function App() {
   const [step, setStep] = useState(0);
   const [workspaceMode, setWorkspaceMode] = useState<"screening"|"documents"|"applications">("applications");
+  const [caseReference,setCaseReference]=useState("SYN-APPLICATION-001");
+  const [prefill,setPrefill]=useState<{caseReference:string;items:PrefillSuggestion[]}|null>(null);
   const [answers, setAnswers] = useState(initialAnswers);
   const [sources, setSources] = useState<EvidenceSource[]>([syntheticSource]);
   const [functional, setFunctional] = useState<Partial<Record<Domain, Finding>>>({});
@@ -69,12 +72,19 @@ export default function App() {
       <button type="button" className={workspaceMode==="screening"?"selected":""} onClick={()=>setWorkspaceMode("screening")}>Screening (optional)</button>
       </div>
       {workspaceMode==="screening"&&<ol className="steps">{steps.map((label,index) => <li key={label}><button className={index === step ? "active" : ""} aria-current={step === index ? "step" : undefined} onClick={() => {setStep(index);setError("");}}><span className="stepnumber">{index + 1}</span>{label}</button></li>)}</ol>}
-      <div className="side-note"><strong>Development preview</strong><p>Synthetic data only. No saving, encryption, login, or patient records.</p></div>
+      <div className="side-note"><strong>Development preview</strong><p>Synthetic data only. Encrypted case saving is available after opening a fictional vault. No production identity, access controls, or PHI storage.</p></div>
     </aside>
     <main id="main" className="main" tabIndex={-1}>
       <header className="topbar"><span>Adult SSI/SSDI · {workspaceMode==="applications"?"Application preparation":workspaceMode==="documents"?"Evidence review":"Referral screening"}</span><span className="demo">SYNTHETIC DATA ONLY</span></header>
-      <div className="content" hidden={workspaceMode!=="applications"}><ApplicationWorkspace /></div>
-      {workspaceMode==="documents" ? <div className="content"><Documents /></div> : workspaceMode==="screening" ? <div className="content"><div className="eyebrow">STEP {step + 1} OF {steps.length}</div><h1>{steps[step]}</h1>
+      <div className="content" hidden={workspaceMode!=="applications"}><ApplicationWorkspace
+        onCaseChange={setCaseReference}
+        prefill={prefill?.caseReference===caseReference?prefill.items:[]}
+        onPrefillApplied={()=>setPrefill(null)}
+      /></div>
+      <div className="content" hidden={workspaceMode!=="documents"}><Documents caseReference={caseReference} onPrefill={(items,forCase)=>{
+        setPrefill({caseReference:forCase,items});setWorkspaceMode("applications");
+      }}/></div>
+      {workspaceMode==="screening" ? <div className="content"><div className="eyebrow">STEP {step + 1} OF {steps.length}</div><h1>{steps[step]}</h1>
       <p className="intro">This tool organizes preliminary service triage. It does not determine SSA eligibility or prevent an applicant from applying.</p>
       {step === 0 && <section className="panel"><h2>Start a training referral</h2><p>Use this prototype only with fictional examples. Your entries remain in memory and are discarded when the window closes.</p><div className="example"><strong>Practice file: SYN-DEMO-001</strong><p>Invented referral, not an actual client. Consider both documented limitations and gaps caused by limited access to treatment.</p></div><p>Screening recommendations require evidence references and a separate human review.</p></section>}
       {step === 1 && <section className="panel"><h2>Evidence sources</h2><p className="muted">Sources are fictional, identified by local references. Avoid all real names and clinical information.</p>{sources.map((source,index)=><fieldset key={index} className="source"><legend>Source {index + 1}</legend><div className="fieldgrid"><label>Reference ID<input value={source.reference} onChange={e=>setSources(s=>s.map((v,i)=>i===index?{...v,reference:e.target.value}:v))}/></label><label>Source type<select value={source.kind} onChange={e=>setSources(s=>s.map((v,i)=>i===index?{...v,kind:e.target.value as EvidenceKind}:v))}>{(["ApplicantReport","ClinicianRecord","HospitalRecord","WorkHistory","AdvocateObservation","Other"] as const).map(v=><option key={v} value={v}>{v.replace(/([a-z])([A-Z])/g,"$1 $2")}</option>)}</select></label></div><label>Evidence summary<textarea rows={2} value={source.summary} onChange={e=>setSources(s=>s.map((v,i)=>i===index?{...v,summary:e.target.value}:v))}/></label><button className="linkbutton" type="button" disabled={sources.length===1} onClick={()=>setSources(s=>s.filter((_,i)=>i!==index))}>Remove source</button></fieldset>)}<button type="button" className="secondary" onClick={()=>setSources(s=>[...s,{reference:`SYN-${String(s.length+1).padStart(3,"0")}`,kind:"Other",summary:""}])}>Add evidence source</button></section>}
