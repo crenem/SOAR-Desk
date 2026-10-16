@@ -13,3 +13,22 @@ jobs:
           bash -n scripts/launch-wsl.sh scripts/prepare-ssa16-template.sh scripts/prepare-ssa3368-template.sh
       - name: Test routing without network or model downloads
         run: python3 -m unittest discover -s workers -p 'test_qwen_worker.py' -v
+
+  windows-geniex-diagnostic:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse Windows GenieX diagnostic PowerShell without executing network calls
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD 'scripts/diagnose-geniex.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
