@@ -23,10 +23,10 @@ const statuses:{value:AnswerStatus;label:string}[]=[
 const display=(s:Response|undefined)=>s?.status==="unknown"?"Unknown":s?.value || "Not collected";
 const fieldsOf=(rows:Rows,key:string)=>rows[key]??[];
 type View="overview"|"interview"|"review"|"evidence"|"package"|"submissions"|"casefiles"|"signatures";
-type Props={onCaseChange?:(ref:string)=>void;prefill?:PrefillSuggestion[];onPrefillApplied?:()=>void;onProgress?:(items:FormCoverage[])=>void;navigate?:{target:MissingTarget;token:number}|null};
+type Props={onCaseChange?:(ref:string)=>void;onCaseModeChange?:(syntheticOnly:boolean)=>void;prefill?:PrefillSuggestion[];onPrefillApplied?:()=>void;onProgress?:(items:FormCoverage[])=>void;navigate?:{target:MissingTarget;token:number}|null};
 
 
-export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillApplied,onProgress,navigate}:Props){
+export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,prefill=[],onPrefillApplied,onProgress,navigate}:Props){
  const [programs,setPrograms]=useState<Program[]>(["ssi","ssdi"]);
  const [formId,setFormId]=useState<FormId>("SSA-3368-BK");
  const [section,setSection]=useState("identity");
@@ -35,6 +35,7 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
  const [rows,setRows]=useState<Rows>({});
  const [includeDeferred,setIncludeDeferred]=useState(false);
  const [caseLabel,setCaseLabel]=useState("SYN-APPLICATION-001");
+ const [syntheticOnly,setSyntheticOnly]=useState(true);
  const [submissionLog,setSubmissionLog]=useState<SubmissionLog>({records:[],events:[]});
  const [evidence,setEvidence]=useState<EvidenceReference[]>([]);
  const [recoveryEvents,setRecoveryEvents]=useState<SyntheticRecoveryEvent[]>([]);
@@ -46,7 +47,7 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
  const autosavePending=useRef(false);
  const lastSaved=useRef("");
  const snapshotRef=useRef<PackageInput>({
-   caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog,recoveryEvents,signatures
+   caseReference:caseLabel,syntheticOnly,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog,recoveryEvents,signatures
  });
  const mappedCoverage=useMemo(()=>formCoverage(programs,includeDeferred,answers,rows),
    [programs,includeDeferred,answers,rows]);
@@ -69,11 +70,12 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
    return ()=>window.cancelAnimationFrame(handle);
  },[navigate?.token,view,formId,section]);
  const currentSnapshot=useMemo<PackageInput>(()=>({
-   caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,
+   caseReference:caseLabel,syntheticOnly,programs,includeDeferred,answers,rows,evidence,
    submissions:submissionLog,recoveryEvents,signatures
- }),[caseLabel,programs,includeDeferred,answers,rows,evidence,submissionLog,recoveryEvents,signatures]);
+ }),[caseLabel,syntheticOnly,programs,includeDeferred,answers,rows,evidence,submissionLog,recoveryEvents,signatures]);
  snapshotRef.current=currentSnapshot;
  useEffect(()=>{onCaseChange?.(caseLabel);},[caseLabel,onCaseChange]);
+ useEffect(()=>{onCaseModeChange?.(syntheticOnly);},[syntheticOnly,onCaseModeChange]);
  useEffect(()=>{setPrefillSelected(Object.fromEntries(prefill.map(p=>[p.key,!answers[p.key]?.value])));},
    [prefill]); // Incoming review batch, never silent field replacement.
  useEffect(()=>{
@@ -90,13 +92,13 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
    try{
      await invoke("autosave_synthetic_case",{request:{
        snapshot:{
-         file_kind:"soar-desk-synthetic-case-snapshot",
-         schema_version:1,synthetic_only:true,case_reference:snapshot.caseReference,
+         file_kind:syntheticOnly?"soar-desk-synthetic-case-snapshot":"soar-desk-local-case-snapshot",
+         schema_version:syntheticOnly?1:2,synthetic_only:syntheticOnly,case_reference:snapshot.caseReference,
          programs:snapshot.programs,include_deferred:snapshot.includeDeferred,
          answers:snapshot.answers,rows:snapshot.rows,evidence:snapshot.evidence,
          submissions:snapshot.submissions,recovery_events:snapshot.recoveryEvents??[],
          signatures:snapshot.signatures??[]
-       },synthetic_confirmed:true
+       },synthetic_confirmed:syntheticOnly,local_risk_acknowledged:!syntheticOnly
      }});
      lastSaved.current=signature;
      setAutosaveState(signature===JSON.stringify(snapshotRef.current)
@@ -147,6 +149,18 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
  const captured=total.reduce((n,x)=>n+x.p.captured,0);
  const possible=total.reduce((n,x)=>n+x.p.total,0);
  const sections=validCurrent?.sections??[];
+ function newLocalCase(){
+  if(!window.confirm("Start a NEW restricted local encrypted case? This development build has NOT passed HIPAA/security deployment review. Do not proceed unless your nonprofit has authorized this installation and accepts responsibility for local protection, backups, incident handling, and SSA form submission."))return;
+  setCaseLabel("CASE-"+crypto.randomUUID());
+  setSyntheticOnly(false);
+  setPrograms(["ssi","ssdi"]);
+  setAnswers({});setRows({});setEvidence([]);setRecoveryEvents([]);setSignatures([]);
+  setSubmissionLog({records:[],events:[]});
+  setActiveVault(null);lastSaved.current="";
+  void invoke("lock_synthetic_autosave").catch(()=>{});
+  setAutosaveState("Restricted local case created in memory. Create an encrypted vault BEFORE entering records.");
+  setFormId("SSA-3368-BK");setSection("identity");setView("interview");
+ }
  function loadSyntheticExample(){
   if((captured>0||submissionLog.records.length>0||evidence.length>0)&&!window.confirm("Replace current synthetic case answers and CLEAR ALL IN-MEMORY evidence and submission records?"))return;
   setEvidence([]);
@@ -178,11 +192,13 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
     jobs:[{title:"Stock clerk",business:"Retail",from:"04/2019",to:"03/2024",hours:"8",days:"5",tasks:"Stocked shelves and moved merchandise",impact:"Reports that standing and lifting became difficult",_status:"reported"}],
     medicines:[{medicine:"Fictional medication — confirm with record",reason:"Pain management",_status:"reported"}]
   });
+  setSyntheticOnly(true);
   setFormId("SSA-3368-BK");setSection("identity");setView("interview");setCaseLabel("SYN-JANE-DOE-001");
  }
  function restoreSyntheticCase(saved:PackageInput){
   // The vault import interface explicitly asks for confirmation before calling.
   setCaseLabel(saved.caseReference);
+  setSyntheticOnly(saved.syntheticOnly!==false);
   setPrograms([...saved.programs]);
   setIncludeDeferred(saved.includeDeferred);
   setAnswers({...saved.answers});
@@ -304,10 +320,10 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
    </section>}
 
    <h1>Application workspace</h1>
-   <p className="intro">One applicant interview, reusable facts, and separate SSA form sections. No real client information: case edits are encrypted and autosaved only after a vault is created or unlocked. An SSA-16 watermarked training PDF can be generated, but no complete form can be submitted.</p>
+   <p className="intro">One applicant interview, reusable facts and separate SSA form sections. {syntheticOnly?"Training mode is fictional-only.":"Restricted local-case mode uses encrypted snapshots but has not passed a deployment security review."} Autosave starts only after creating or unlocking a vault. Official form mappings and submission pathways remain incomplete.</p>
    <div className="panel intake-setup">
      <div className="fieldgrid">
-      <label>Fictional case reference<input value={caseLabel} onChange={e=>setCaseLabel(e.target.value)} disabled={submissionLog.records.length>0||!!activeVault} maxLength={80}/></label>
+      <label>{syntheticOnly?"Fictional case reference":"Opaque local case reference"}<input value={caseLabel} onChange={e=>setCaseLabel(e.target.value)} disabled={submissionLog.records.length>0||!!activeVault} maxLength={80}/></label>
       <div><strong>Applications being prepared</strong>
        <div className="intake-choices"><label className="checkline"><input type="checkbox" checked={programs.includes("ssi")} onChange={()=>chooseProgram("ssi")}/> SSI</label>
        <label className="checkline"><input type="checkbox" checked={programs.includes("ssdi")} onChange={()=>chooseProgram("ssdi")}/> SSDI</label></div>
@@ -316,7 +332,9 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
      <label className="checkline"><input type="checkbox" checked={includeDeferred} onChange={e=>setIncludeDeferred(e.target.checked)}/> Show SSA-8001 deferred/abbreviated SSI as a reference (not the default)</label>
      <p className="hint">Application pathways reflect your manual case planning, not an automated determination of eligibility or whether each form is required.</p>
      {submissionLog.records.length>0&&<p className="hint">Case reference is locked while this in-memory session contains submission records. Loading the demo anew clears these records after confirmation.</p>}
-     <button type="button" className="secondary" onClick={loadSyntheticExample}>Load synthetic Jane Doe example</button>
+     <div className="case-mode-buttons"><button type="button" className="secondary" onClick={loadSyntheticExample}>Load fictional training example</button>
+     <button type="button" className="secondary" disabled={!syntheticOnly||!!activeVault} onClick={newLocalCase}>New restricted local case…</button></div>
+     {!syntheticOnly&&<p className="field-warning">Local case beta: store only in an encrypted vault. This build has no SQLCipher, authenticated staff roles, independently anchored audit, or encrypted source-document storage. Do not treat this as an SSA filing system or a certified medical-record system.</p>}
    </div>
    <div className="intake-tabs" role="group" aria-label="Application views">
     {(["overview","interview","review","evidence","signatures","package","submissions","casefiles"] as View[]).map(v=><button type="button" key={v} className={view===v?"active":""} onClick={()=>setView(v)}>{v==="overview"?"Form inventory":v==="interview"?"Guided interview":v==="review"?"Review gaps":v==="evidence"?"Evidence register":v==="signatures"?"Acknowledgments":v==="package"?"SSA exports":v==="casefiles"?"Case files":"Submissions & receipts"}</button>)}
@@ -367,8 +385,12 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
    </section>}
    {view==="evidence"&&<EvidenceRegister evidence={evidence} setEvidence={setEvidence}/>}
    {view==="signatures"&&<SignatureWorkbench formId={formId} caseReference={caseLabel} answers={answers} rows={rows} receipts={signatures} onChange={setSignatures}/>}
-   {view==="package"&&<PackageExport input={{caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog,recoveryEvents,signatures}}/>}\n   {view==="casefiles"&&<VaultLab input={currentSnapshot} onRestore={restoreSyntheticCase} onVaultReady={vaultReady} initialMode={vaultMode}/>}
+   {view==="package"&&(syntheticOnly?<PackageExport input={{caseReference:caseLabel,syntheticOnly,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog,recoveryEvents,signatures}}/>:
+    <section className="panel"><h2>Official form preparation pending</h2>
+     <p>The current exporter is a watermarked training prototype. It intentionally cannot produce a purported official SSA-submittable form from a local case until the complete source-question mapping and signing workflow are verified.</p>
+     <p>For now, use the interview and source register to prepare information for the appropriate official SSA submission channel. Never export real medical data through the synthetic unencrypted JSON tool.</p>
+    </section>)} \n   {view==="casefiles"&&<VaultLab input={currentSnapshot} onRestore={restoreSyntheticCase} onVaultReady={vaultReady} initialMode={vaultMode}/>}
    <div hidden={view!=="submissions"}><SubmissionTracker log={submissionLog} setLog={setSubmissionLog} caseReference={caseLabel} programs={programs}/></div>
-   <p className="hint">Synthetic-only encrypted autosave requires a writable unlocked case vault. No transmission, official signature, or SSA eligibility decision. Verify form editions and complete all source questions before using any generated paperwork.</p>
+   <p className="hint">Encrypted autosave requires an unlocked writable vault. The application does not file claims or determine eligibility. All signatures here are internal acknowledgments, not SSA-accepted electronic submissions.</p>
   </div>;
 }
