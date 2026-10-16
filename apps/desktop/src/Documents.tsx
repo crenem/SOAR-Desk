@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { extractMetadata, type MetadataCandidate, type MetadataCategory } from "./metadata";
 import { reviewedSuggestions,type PrefillSuggestion } from "./document-prefill";
 import type {AttachedSource} from "./evidence-attachment";
+import {analysisMode} from "./document-intake-policy";
 
 type Page = { page: number; text: string; method: string; warning: string | null };
 type Document = { document_id: string; sha256: string; pages: Page[] };
@@ -91,7 +92,7 @@ export default function Documents({caseReference,syntheticOnly,onPrefill,onEvide
     setPath(filePath);setDocumentCase(caseReference);setDocument(null);setSegments([]);setMetadata([]);setQwen([]);setError("");setReview("PendingHumanReview");setReviewer("");setRationale("");
     setBusy(true);setProgress("Extracting document text and performing OCR…");
     try {
-      const doc = await invoke<Document>("extract_synthetic_document",{request:{path:filePath,synthetic_confirmed:syntheticOnly,local_risk_acknowledged:!syntheticOnly}});
+      const doc = await invoke<Document>("extract_synthetic_document",{request:{path:filePath,...analysisMode(syntheticOnly)}});
       if (generation.current !== run) return;
       setDocument(doc);
       setMetadata(extractMetadata(doc.pages));
@@ -104,7 +105,7 @@ export default function Documents({caseReference,syntheticOnly,onPrefill,onEvide
         if (generation.current !== run) return;
         setProgress(`Classifying passage ${i+1} of ${chunks.length} (page ${chunks[i].page})…`);
         try {
-          const result=await invoke<LayaResult>("classify_synthetic_text",{request:{text:chunks[i].text,synthetic_confirmed:syntheticOnly,local_risk_acknowledged:!syntheticOnly}});
+          const result=await invoke<LayaResult>("classify_synthetic_text",{request:{text:chunks[i].text,...analysisMode(syntheticOnly)}});
           output[i]={...chunks[i],result};
         } catch(e) {output[i]={...chunks[i],error:String(e)};}
         if (generation.current === run) setSegments([...output]);
@@ -115,7 +116,7 @@ export default function Documents({caseReference,syntheticOnly,onPrefill,onEvide
         if (generation.current !== run) return;
         setProgress(`Qwen3 4B: passage ${i+1} of ${chunks.length} (page ${chunks[i].page})…`);
         try {
-          const data=await invoke<QwenResult>("extract_qwen_candidates",{request:{text:chunks[i].text,synthetic_confirmed:syntheticOnly,local_risk_acknowledged:!syntheticOnly}});
+          const data=await invoke<QwenResult>("extract_qwen_candidates",{request:{text:chunks[i].text,...analysisMode(syntheticOnly)}});
           extracted.push({page:chunks[i].page,index:chunks[i].index,data});
         } catch(e) {
           extracted.push({page:chunks[i].page,index:chunks[i].index,error:String(e)});
@@ -136,7 +137,7 @@ export default function Documents({caseReference,syntheticOnly,onPrefill,onEvide
     try{
       const attached=await invoke<AttachedSource>("attach_evidence_document",{request:{
         source_path:path,case_reference:caseReference,expected_sha256:document.sha256,
-        synthetic_confirmed:syntheticOnly,local_risk_acknowledged:!syntheticOnly
+        ...analysisMode(syntheticOnly)
       }});
       onEvidenceAttached(attached,caseReference);
     }catch(e){setError("Encrypted attachment could not be created: "+String(e));}
