@@ -383,7 +383,7 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
     <p><strong>Current synthetic case:</strong> {caseLabel}</p>
     <p><strong>Applicant:</strong> {display(answers["person.name"])} · <strong>Onset:</strong> {display(answers["work.onset"])} · <strong>Reported living arrangement:</strong> {display(answers["living.type"])}</p>
    </section>}
-   {view==="evidence"&&<EvidenceRegister evidence={evidence} setEvidence={setEvidence}/>}
+   {view==="evidence"&&<EvidenceRegister evidence={evidence} setEvidence={setEvidence} syntheticOnly={syntheticOnly}/>}
    {view==="signatures"&&<SignatureWorkbench formId={formId} caseReference={caseLabel} answers={answers} rows={rows} receipts={signatures} onChange={setSignatures}/>}
    {view==="package"&&(syntheticOnly?<PackageExport input={{caseReference:caseLabel,syntheticOnly,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog,recoveryEvents,signatures}}/>:
     <section className="panel"><h2>Official form preparation pending</h2>
