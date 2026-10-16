@@ -73,10 +73,12 @@ if ! "$ROOT/.venv-laya/bin/python" -c 'import fitz' >/dev/null 2>&1; then
   "$ROOT/.venv-laya/bin/python" -m pip install 'pymupdf>=1.24,<1.27' \
     || echo "PDF form preview unavailable until PyMuPDF is installed." >&2
 fi
+# SSA's public site can return HTTP 403 to scripts while its PDF remains
+# accessible in a user's browser. Never retry that blocked request on every
+# application launch. The reviewed source can be imported through the app's
+# own native file picker in Draft package -> Install SSA-16 PDF from file.
 if [[ ! -f "$ROOT/.local/ssa-templates/ssa-16-bk.pdf" ]]; then
-  echo "Caching unchanged SSA-16 template for synthetic PDF preview..."
-  bash "$ROOT/scripts/prepare-ssa16-template.sh" \
-    || echo "Could not cache SSA-16; application will still launch." >&2
+  echo "SSA-16 PDF template not cached. After launch: Draft package -> Install SSA-16 PDF from file."
 fi
 
 server_pid=""
