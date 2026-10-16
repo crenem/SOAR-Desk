@@ -19,5 +19,7 @@ else
   trap - EXIT
 fi
 "$ROOT/.venv-laya/bin/python" "$ROOT/scripts/inspect-ssa-template.py" "$PDF" --expected "SSA-3368-BK (06-2024)" > "$DEST/ssa-3368-widgets.json"
+"$ROOT/.venv-laya/bin/python" "$ROOT/scripts/ssa3368-field-workbench.py" "$PDF" \
+  --out-dir "$DEST/ssa3368-workbench" --render-pages 7
 sha256sum "$PDF" | tee "$PDF.sha256"
-echo "SSA-3368 research manifest: $DEST/ssa-3368-widgets.json"
+echo "SSA-3368 source and pending-only crosswalk: $DEST/ssa3368-workbench/ssa3368-mapping-review.json"
