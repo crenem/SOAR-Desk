@@ -66,6 +66,19 @@ if [[ ! -f "$LAYA_MARKER" ]]; then
   fi
 fi
 
+# The SSA-16 rendering preview is offline after its dependencies and the
+# unchanged public template are cached; failure here cannot block app startup.
+if ! "$ROOT/.venv-laya/bin/python" -c 'import fitz' >/dev/null 2>&1; then
+  echo "Installing local PDF form renderer (PyMuPDF), once..."
+  "$ROOT/.venv-laya/bin/python" -m pip install 'pymupdf>=1.24,<1.27' \\
+    || echo "PDF form preview unavailable until PyMuPDF is installed." >&2
+fi
+if [[ ! -f "$ROOT/.local/ssa-templates/ssa-16-bk.pdf" ]]; then
+  echo "Caching unchanged SSA-16 template for synthetic PDF preview..."
+  bash "$ROOT/scripts/prepare-ssa16-template.sh" \\
+    || echo "Could not cache SSA-16; application will still launch." >&2
+fi
+
 server_pid=""
 if python3 "$ROOT/scripts/probe-geniex.py"; then
   echo "Windows GenieX GGUF model responded successfully from WSL2."
