@@ -59,7 +59,35 @@ class AdapterTests(unittest.TestCase):
                 with patch.object(worker, "local_json", side_effect=respond):
                     _, backend, _ = worker.request_model("synthetic")
         self.assertEqual(backend, "cpu")
-        self.assertIs(calls[0][1]["enable_think"], False)
+        self.assertNotIn("enable_think", calls[0][1])
+        self.assertEqual([m["role"] for m in calls[0][1]["messages"]], ["user"])
+
+    def test_geniex_omits_explicit_thinking_parameter(self):
+        """Confirmed on Windows: enable_think=false returned zero tokens."""
+        usable = {"choices":[{"finish_reason":"stop",
+                               "message":{"content":'{"summary":"Hello","findings":[]}'}}],
+                  "usage":{"completion_tokens":10}}
+        with patch.object(worker, "local_json", return_value=usable) as call:
+            worker.geniex_completion("unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_0",
+                [{"role":"user","content":"Fictional hello"}], attempts=1, require_json=True)
+        payload = call.call_args.args[1]
+        self.assertNotIn("enable_think", payload)
+        self.assertEqual(len(payload["messages"]), 1)
+        self.assertEqual(payload["messages"][0]["role"], "user")
+
+    def test_geniex_extract_request_uses_verified_http_shape(self):
+        result={"choices":[{"finish_reason":"stop",
+                             "message":{"content":'{"summary":"fictional","findings":[]}'}}]}
+        with patch.dict(os.environ, {"SOAR_QWEN_BACKEND":"npu"}):
+            with patch.object(worker,"geniex_model",
+                              return_value="unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_0"):
+                with patch.object(worker,"local_json",return_value=result) as call:
+                    worker.request_model("Fictional record: Jane reports knee pain.")
+        payload=call.call_args.args[1]
+        self.assertNotIn("enable_think",payload)
+        self.assertEqual([m["role"] for m in payload["messages"]],["user"])
+        self.assertIn("EXACT contiguous substring", payload["messages"][0]["content"])
+        self.assertIn("Fictional record: Jane reports knee pain.",payload["messages"][0]["content"])
 
     def test_retry_a_transient_zero_token_geniex_completion(self):
         blank = {"choices":[{"finish_reason":"stop","message":{"content":""}}],
