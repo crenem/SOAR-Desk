@@ -588,6 +588,61 @@ mod tests {
     }
 
     #[test]
+    fn document_attach_backup_and_guarded_plaintext_export() {
+        let _test_guard=vault_test_guard();
+        const OP:&str="operator-test-passphrase-2026";
+        const ORG:&str="organization-recovery-passphrase-2026";
+        let vault=target("soarvault");
+        let src=target("pdf");
+        let dest=target("pdf");
+        let backup=target("soarbackup");
+        let case_id="SYN-DOCUMENT-TEST";
+        std::fs::write(&src,b"%PDF-1.7\nFICTIONAL MEDICAL RECORD ONLY").unwrap();
+        let snapshot=serde_json::json!({
+            "file_kind":"soar-desk-synthetic-case-snapshot","schema_version":1,
+            "synthetic_only":true,"case_reference":case_id,
+            "programs":["ssdi"],"answers":{},"rows":{},"evidence":[],
+            "submissions":{"records":[],"events":[]}
+        });
+        create_synthetic_vault(CreateSyntheticVaultRequest{
+            output_path:vault.clone(),snapshot,
+            practitioner_passphrase:OP.into(),organization_recovery_passphrase:ORG.into(),
+            synthetic_confirmed:true,local_risk_acknowledged:false
+        }).unwrap();
+        let attached=attach_evidence_document(AttachEvidenceRequest {
+            source_path:src.clone(),case_reference:case_id.into(),
+            synthetic_confirmed:true,local_risk_acknowledged:false
+        }).unwrap();
+        assert_eq!(attached.bytes,35);
+        let sealed=std::fs::read(&attached.encrypted_path).unwrap();
+        assert!(!String::from_utf8_lossy(&sealed).contains("FICTIONAL MEDICAL RECORD ONLY"));
+        assert!(export_evidence_document(ExportEvidenceRequest{
+            case_reference:case_id.into(),blob_id:attached.blob_id.clone(),
+            output_path:dest.clone(),acknowledge_plaintext_export:false
+        }).is_err());
+        assert!(!std::path::Path::new(&dest).exists());
+        let saved=export_evidence_document(ExportEvidenceRequest{
+            case_reference:case_id.into(),blob_id:attached.blob_id,
+            output_path:dest.clone(),acknowledge_plaintext_export:true
+        }).unwrap();
+        assert_eq!(saved,dest);
+        assert_eq!(std::fs::read(&dest).unwrap(),std::fs::read(&src).unwrap());
+        backup_synthetic_vault(BackupSyntheticVaultRequest{
+            input_path:vault.clone(),output_path:backup.clone(),
+            practitioner_passphrase:OP.into(),synthetic_confirmed:true,
+            local_risk_acknowledged:false
+        }).unwrap();
+        let backup_dir=blob_folder(std::path::Path::new(&backup));
+        assert_eq!(std::fs::read_dir(&backup_dir).unwrap().count(),1);
+        lock_synthetic_autosave().unwrap();
+        for file in [src,dest,vault,backup] {std::fs::remove_file(file).unwrap();}
+        for folder in [blob_folder(std::path::Path::new(&attached.encrypted_path)
+                   .parent().unwrap().parent().unwrap()),backup_dir] {
+            let _=std::fs::remove_dir_all(folder);
+        }
+    }
+
+    #[test]
     fn end_to_end_create_open_backup_and_organizational_recovery() {
         let _test_guard=vault_test_guard();
         const OP:&str="synthetic-operator-password-2026";
