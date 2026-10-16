@@ -115,7 +115,7 @@ export default function Documents({caseReference,syntheticOnly,onPrefill,onEvide
         if (generation.current !== run) return;
         setProgress(`Qwen3 4B: passage ${i+1} of ${chunks.length} (page ${chunks[i].page})…`);
         try {
-          const data=await invoke<QwenResult>("extract_qwen_candidates",{request:{text:chunks[i].text,synthetic_confirmed:true}});
+          const data=await invoke<QwenResult>("extract_qwen_candidates",{request:{text:chunks[i].text,synthetic_confirmed:syntheticOnly,local_risk_acknowledged:!syntheticOnly}});
           extracted.push({page:chunks[i].page,index:chunks[i].index,data});
         } catch(e) {
           extracted.push({page:chunks[i].page,index:chunks[i].index,error:String(e)});
