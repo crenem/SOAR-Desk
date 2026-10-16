@@ -341,7 +341,7 @@ mod tests {
             organization_recovery_passphrase:ORG.into(),
             synthetic_confirmed:true
         }).unwrap();
-        let file=std::fs::read(&original).unwrap();
+        let mut file=std::fs::read(&original).unwrap();
         assert!(!String::from_utf8_lossy(&file).contains("Fictional Jane Doe"));
         let reopened=open_synthetic_vault(OpenSyntheticVaultRequest {
             input_path:original.clone(),practitioner_passphrase:OP.into(),
@@ -352,6 +352,24 @@ mod tests {
             input_path:original.clone(),practitioner_passphrase:ORG.into(),
             synthetic_confirmed:true
         }).is_err());
+        // Autosave encrypts a changed snapshot, retains the prior encrypted
+        // generation, and never writes identifiable plaintext to disk.
+        let mut revision=payload.clone();
+        revision["answers"]["person.name"]["value"]=serde_json::json!("Fictional autosaved name");
+        let status=autosave_synthetic_case(SyntheticAutosaveRequest {
+            snapshot:revision.clone(),synthetic_confirmed:true
+        }).unwrap();
+        assert!(status.active);
+        let latest=std::fs::read(&original).unwrap();
+        assert_ne!(latest,file);
+        assert!(!String::from_utf8_lossy(&latest).contains("Fictional autosaved name"));
+        let previous_path=format!("{}.previous",original);
+        assert_eq!(std::fs::read(&previous_path).unwrap(),file);
+        file=latest;
+        assert_eq!(open_synthetic_vault(OpenSyntheticVaultRequest {
+            input_path:original.clone(),practitioner_passphrase:OP.into(),
+            synthetic_confirmed:true
+        }).unwrap(),revision);
         backup_synthetic_vault(BackupSyntheticVaultRequest {
             input_path:original.clone(),output_path:backup.clone(),
             practitioner_passphrase:OP.into(),synthetic_confirmed:true
@@ -377,7 +395,7 @@ mod tests {
         assert!(new_case["recovery_events"].is_array());
         assert_eq!(new_case["case_reference"],"SYN-CASE-TEST");
         assert_eq!(std::fs::read(&original).unwrap(),file);
-        for path in [original,backup,recovered] {
+        for path in [original,backup,recovered,previous_path] {
             std::fs::remove_file(path).unwrap();
         }
     }
