@@ -49,6 +49,22 @@ cd ~/Projects/SOAR-Desk
 python3 scripts/probe-geniex.py
 ```
 
+If the response remains empty after both requests, **first distinguish Windows HTTP from WSL2 and the underlying GGUF runtime**. Open Windows PowerShell in the repository's Windows-accessible path and run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\diagnose-geniex.ps1
+```
+
+This script sends only a fictional HELLO prompt, identifies the process listening on port 18181, lists model IDs, and compares a minimal chat-completion request with one using `enable_think=false`. It does not terminate or reconfigure anything, and does not write files. If both return `finish_reason=stop` and `completion_tokens=0` from Windows as well, WSL2 is **not** the cause.
+
+For the exact GGUF model listed in the diagnostic, run it **directly**, bypassing the server:
+
+```powershell
+geniex infer unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_0 --think=false --compute cpu
+```
+
+At the interactive prompt, enter a fictional query such as `Say HELLO.`. This is a diagnostic CPU run, not a recommendation to disable NPU acceleration permanently. If direct CLI works but HTTP is blank, check the existing server instance and restart it with `geniex --log debug serve` *after confirming and stopping only the actual GenieX process occupying the port*. If direct CLI is blank too, investigate the cached GGUF file, model runtime, and GenieX version rather than altering SOAR Desk prompts. The current CLI supports `geniex infer`, `--compute`, and the global `--log` option in Qualcomm's documentation.
+
 If the response remains empty after both requests, check the **Windows GenieX server console/logs**, terminate and restart that server, verify the GGUF model is loaded, and run the probe again. You can also test GenieX independently with this synthetic request in Windows PowerShell:
 
 ```powershell
