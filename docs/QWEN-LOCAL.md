@@ -71,6 +71,6 @@ The launcher reports **GenieX GGUF inference selected** when the actual JSON gen
 **Resource note:** The Snapdragon X device may have memory contention if both a GenieX model and Linux CPU llama-server are loaded. The launcher skips CPU startup when GenieX inference is healthy. With a failed probe, CPU fallback can use significant memory. The local integration still remains synthetic-only; no real patient information or external model requests are permitted.
 
 Qualcomm references:
-- https://github.com/qualcomm/GenieX/blob/main/docs/run/cli/local-server.mdx
+- https://github.com/qualcomm/GenieX/blob/main/docs/cn/run/cli/local-server.mdx
 - https://github.com/qualcomm/GenieX
 
