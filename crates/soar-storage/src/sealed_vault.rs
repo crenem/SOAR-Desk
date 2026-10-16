@@ -23,6 +23,11 @@ const LOCAL_CASE_MAGIC: &str = "SOAR-DESK-LOCAL-CASE-VAULT";
 const LOCAL_CASE_VERSION: u32 = 2;
 pub const MAX_ENVELOPE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_PLAINTEXT_BYTES: usize = 2 * 1024 * 1024;
+pub const MAX_DOCUMENT_BYTES: usize = 20 * 1024 * 1024;
+pub const MAX_DOCUMENT_ENVELOPE_BYTES: usize = 28 * 1024 * 1024;
+const DOCUMENT_MAGIC: &str = "SOAR-DESK-SEALED-EVIDENCE";
+const DOCUMENT_VERSION: u32 = 1;
+
 const KDF_MEMORY_KIB: u32 = 64 * 1024;
 const KDF_ITERATIONS: u32 = 3;
 const KDF_LANES: u32 = 1;
@@ -76,6 +81,58 @@ struct Envelope {
     slots: Vec<WrappedSlot>,
     payload: CipherBlock,
 }
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SealedDocument {
+    file_kind: String,
+    version: u32,
+    vault_id: String,
+    blob_id: String,
+    payload: CipherBlock,
+}
+fn new_blob_id() -> String {
+    random::<16>().iter().map(|b|format!("{b:02x}")).collect()
+}
+fn valid_blob_id(id:&str)->bool {
+    id.len()==32 && id.bytes().all(|b|b.is_ascii_hexdigit())
+}
+fn document_aad(env:&Envelope,blob_id:&str)->Vec<u8> {
+    aad_versioned(&env.file_kind,env.version,&env.vault_id,&format!("document:{blob_id}"))
+}
+fn encrypt_document_with_master(
+    env:&Envelope,master:&[u8;32],content:&[u8],id:&str
+)->Result<Vec<u8>,VaultCryptoError> {
+    if !valid_blob_id(id)||content.is_empty()||content.len()>MAX_DOCUMENT_BYTES {
+        return Err(VaultCryptoError::InvalidFormat);
+    }
+    let payload=encrypt_block(master,content,&document_aad(env,id))?;
+    let document=SealedDocument{
+        file_kind:DOCUMENT_MAGIC.into(),version:DOCUMENT_VERSION,
+        vault_id:env.vault_id.clone(),blob_id:id.into(),payload
+    };
+    let bytes=serde_json::to_vec(&document).map_err(|_|VaultCryptoError::InvalidFormat)?;
+    if bytes.len()>MAX_DOCUMENT_ENVELOPE_BYTES {return Err(VaultCryptoError::InvalidFormat)}
+    Ok(bytes)
+}
+fn decrypt_document_with_master(
+    env:&Envelope,master:&[u8;32],sealed:&[u8]
+)->Result<(String,Zeroizing<Vec<u8>>),VaultCryptoError> {
+    if sealed.is_empty()||sealed.len()>MAX_DOCUMENT_ENVELOPE_BYTES {
+       return Err(VaultCryptoError::InvalidFormat);
+    }
+    let document:SealedDocument=serde_json::from_slice(sealed)
+        .map_err(|_|VaultCryptoError::InvalidFormat)?;
+    if document.file_kind!=DOCUMENT_MAGIC || document.version!=DOCUMENT_VERSION
+        || document.vault_id!=env.vault_id || !valid_blob_id(&document.blob_id) {
+        return Err(VaultCryptoError::AuthenticationFailed);
+    }
+    let payload=decrypt_block(master,&document.payload,&document_aad(env,&document.blob_id))?;
+    if payload.len()>MAX_DOCUMENT_BYTES {
+        return Err(VaultCryptoError::InvalidFormat);
+    }
+    Ok((document.blob_id,payload))
+}
+
 fn random<const N: usize>() -> [u8; N] {
     let mut data = [0; N];
     OsRng.fill_bytes(&mut data);
@@ -353,6 +410,19 @@ pub struct UnlockedSession {
 }
 
 impl UnlockedSession {
+    pub fn case_reference(&self) -> &str { &self.envelope.vault_id }
+    pub fn encrypt_document(&self,content:&[u8])
+        ->Result<(String,Vec<u8>),VaultCryptoError>{
+        let id=new_blob_id();
+        let sealed=encrypt_document_with_master(&self.envelope,&self.master,content,&id)?;
+        Ok((id,sealed))
+    }
+    pub fn decrypt_document(&self,sealed:&[u8],expected_id:&str)
+        ->Result<Zeroizing<Vec<u8>>,VaultCryptoError>{
+        let (id,contents)=decrypt_document_with_master(&self.envelope,&self.master,sealed)?;
+        if id!=expected_id{return Err(VaultCryptoError::AuthenticationFailed)}
+        Ok(contents)
+    }
     pub fn encrypt_update(&mut self, snapshot_json: &[u8]) -> Result<Vec<u8>, VaultCryptoError> {
         valid_case(snapshot_json)?;
         let case: serde_json::Value = serde_json::from_slice(snapshot_json)
@@ -379,6 +449,24 @@ pub fn unlock_for_autosave(
     let master = unlock_master(&envelope, SlotRole::Practitioner, practitioner_passphrase)?;
     let plaintext = payload_from_master(&envelope, &master)?;
     Ok((plaintext, UnlockedSession { envelope, master }))
+}
+
+/// Re-encrypt an evidence blob using a recovered case's new random VMK.
+/// The caller must coordinate all files in an auditable recovery transaction.
+pub fn reencrypt_document_for_recovery(
+    old_vault:&[u8],old_org_pass:&str,recovered_vault:&[u8],
+    new_practitioner_pass:&str,old_blob:&[u8]
+)->Result<(String,Vec<u8>),VaultCryptoError>{
+    let old_env=parse_envelope(old_vault)?;
+    let new_env=parse_envelope(recovered_vault)?;
+    if old_env.vault_id!=new_env.vault_id || old_env.version!=new_env.version {
+        return Err(VaultCryptoError::AuthenticationFailed);
+    }
+    let original_key=unlock_master(&old_env,SlotRole::OrganizationRecovery,old_org_pass)?;
+    let restored_key=unlock_master(&new_env,SlotRole::Practitioner,new_practitioner_pass)?;
+    let (id,data)=decrypt_document_with_master(&old_env,&original_key,old_blob)?;
+    let result=encrypt_document_with_master(&new_env,&restored_key,&data,&id)?;
+    Ok((id,result))
 }
 
 /// Routine unlock never accepts the organizational recovery credential.
@@ -553,6 +641,37 @@ mod tests {
         assert!(!encrypted_file_is_synthetic(&rekey).unwrap());
         assert!(open_practitioner(&rekey,OP).is_err());
         assert!(open_practitioner(&rekey,NEXT_OP).is_ok());
+    }
+    #[test]
+    fn encrypted_document_is_bound_to_case_and_survives_authorized_recovery() {
+        let original=seal_synthetic_case(&test_case(),OP,ORG).unwrap();
+        let (_,session)=unlock_for_autosave(&original,OP).unwrap();
+        let fake_pdf=b"%PDF-1.7\nFICTIONAL TEST MEDICAL RECORD\n";
+        let (id,blob)=session.encrypt_document(fake_pdf).unwrap();
+        assert!(valid_blob_id(&id));
+        assert!(!String::from_utf8_lossy(&blob).contains("FICTIONAL TEST MEDICAL RECORD"));
+        assert_eq!(&*session.decrypt_document(&blob,&id).unwrap(),fake_pdf);
+        assert!(session.decrypt_document(&blob,"aabbccddeeff00112233445566778899").is_err());
+        let next=recover_and_rekey(&original,ORG,NEXT_OP,NEXT_ORG,
+            "ORG-CUSTODIAN","Replacing departing practitioner after authorized request").unwrap();
+        let (_,new_session)=unlock_for_autosave(&next,NEXT_OP).unwrap();
+        assert!(new_session.decrypt_document(&blob,&id).is_err());
+        let (same_id,rekeyed)=reencrypt_document_for_recovery(
+            &original,ORG,&next,NEXT_OP,&blob).unwrap();
+        assert_eq!(same_id,id);
+        assert_eq!(&*new_session.decrypt_document(&rekeyed,&id).unwrap(),fake_pdf);
+    }
+    #[test]
+    fn tampered_blob_header_and_ciphertext_are_rejected() {
+        let vault=seal_synthetic_case(&test_case(),OP,ORG).unwrap();
+        let (_,session)=unlock_for_autosave(&vault,OP).unwrap();
+        let (id,blob)=session.encrypt_document(b"SYNTHETIC DOCUMENT CONTENT").unwrap();
+        let mut edited:serde_json::Value=serde_json::from_slice(&blob).unwrap();
+        edited["vault_id"]=serde_json::json!("SYN-WRONG-CASE");
+        assert!(session.decrypt_document(&serde_json::to_vec(&edited).unwrap(),&id).is_err());
+        edited=serde_json::from_slice(&blob).unwrap();
+        edited["payload"]["ciphertext"]=serde_json::json!("AAAA");
+        assert!(session.decrypt_document(&serde_json::to_vec(&edited).unwrap(),&id).is_err());
     }
     #[test]
     fn invalid_secrets_and_payloads_fail_closed() {
