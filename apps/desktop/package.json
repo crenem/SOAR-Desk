@@ -11,7 +11,8 @@
     "test:forms": "node tests/forms.test.cjs",
     "test:submissions": "node tests/ssa-submissions.test.cjs",
     "test:package": "node tests/application-package.test.cjs",
-    "test:fields": "node tests/field-prefill.test.cjs"
+    "test:fields": "node tests/field-prefill.test.cjs",
+    "test:workflow": "node tests/form-navigation-signatures.test.cjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
