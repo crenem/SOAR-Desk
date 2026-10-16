@@ -17,7 +17,7 @@ const FIELDS:Record<string,{key:string;label:string}>={
 export function reviewedSuggestions(
  metadata:MetadataCandidate[],sha256:string,caseReference:string
 ):PrefillSuggestion[]{
- if(!/^(?:SYN-[A-Za-z0-9_-]{1,76}|CASE-[A-Za-z0-9_-]{11,75})$/.test(caseReference)||!/^[0-9a-f]{64}$/i.test(sha256))return [];
+ if(!/^(?:SYN-[A-Za-z0-9_-]{1,76}|CASE-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/.test(caseReference)||!/^[0-9a-f]{64}$/i.test(sha256))return [];
  const found=new Map<string,PrefillSuggestion>();
  const conflicted=new Set<string>();
  for(const item of metadata){
