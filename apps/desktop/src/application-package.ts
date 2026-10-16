@@ -4,6 +4,7 @@
  */
 import {FORMS,applicable,progress,type Answers,type FormId,type Program,type Rows} from "./forms";
 import type {SubmissionLog} from "./ssa-submissions";
+import type {SignatureReceipt} from "./signature-policy";
 
 export type EvidenceStatus="pending"|"human_verified"|"rejected";
 export type EvidenceReference={
@@ -27,6 +28,7 @@ export type PackageInput={
   evidence:EvidenceReference[];
   submissions:SubmissionLog;
   recoveryEvents?:SyntheticRecoveryEvent[];
+  signatures?:SignatureReceipt[];
 };
 export type QuestionSnapshot={
   key:string;ref:string;label:string;
