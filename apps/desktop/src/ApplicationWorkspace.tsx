@@ -196,7 +196,7 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
     <input id={key} type="text" inputMode={["ssn","phone","weight","date","month"].includes(format)?"numeric":"text"}
       value={value}
       onChange={e=>update(inputMask(format,e.target.value))}
-      onBlur={()=>update(normalizeOnBlur(format,value))}
+      onBlur={()=>{const normalized=normalizeOnBlur(format,value);if(normalized!==value)update(normalized);}}
       aria-invalid={!!issue}
       placeholder={format==="ssn"?"000-00-0000":format==="phone"?"(318) 555-0100":
         format==="height"?"5 ft 11 in":format==="weight"?"180 lb":
