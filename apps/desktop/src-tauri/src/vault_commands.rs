@@ -341,6 +341,47 @@ mod tests {
     }
 
     #[test]
+    fn restricted_local_case_requires_explicit_risk_ack_and_roundtrips_encrypted() {
+        const OP:&str="local-operator-password-2026";
+        const ORG:&str="local-nonprofit-recovery-2026";
+        let path=target("soarvault");
+        let snapshot=serde_json::json!({
+            "file_kind":"soar-desk-local-case-snapshot",
+            "schema_version":2,"synthetic_only":false,
+            "case_reference":"CASE-12345678-abcd-efab-123456789abc",
+            "programs":["ssi","ssdi"],"answers":{},"rows":{},"evidence":[],
+            "signatures":[],
+            "submissions":{"records":[],"events":[]}
+        });
+        assert!(create_synthetic_vault(CreateSyntheticVaultRequest {
+            output_path:path.clone(),snapshot:snapshot.clone(),
+            practitioner_passphrase:OP.into(),
+            organization_recovery_passphrase:ORG.into(),
+            synthetic_confirmed:true,local_risk_acknowledged:false
+        }).is_err());
+        assert!(!std::path::Path::new(&path).exists());
+        let created=create_synthetic_vault(CreateSyntheticVaultRequest {
+            output_path:path.clone(),snapshot:snapshot.clone(),
+            practitioner_passphrase:OP.into(),
+            organization_recovery_passphrase:ORG.into(),
+            synthetic_confirmed:false,local_risk_acknowledged:true
+        }).unwrap();
+        assert!(!created.synthetic_only);
+        assert!(!String::from_utf8_lossy(&std::fs::read(&path).unwrap()).contains("case_reference"));
+        assert!(open_synthetic_vault(OpenSyntheticVaultRequest {
+            input_path:path.clone(),practitioner_passphrase:OP.into(),
+            synthetic_confirmed:true,local_risk_acknowledged:false
+        }).is_err());
+        let opened=open_synthetic_vault(OpenSyntheticVaultRequest {
+            input_path:path.clone(),practitioner_passphrase:OP.into(),
+            synthetic_confirmed:false,local_risk_acknowledged:true
+        }).unwrap();
+        assert_eq!(opened,snapshot);
+        lock_synthetic_autosave().unwrap();
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn end_to_end_create_open_backup_and_organizational_recovery() {
         const OP:&str="synthetic-operator-password-2026";
         const ORG:&str="synthetic-nonprofit-recovery-2026";
