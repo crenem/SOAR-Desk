@@ -70,6 +70,8 @@ export function checkEvidence(evidence:EvidenceReference[]):void{
     ids.add(item.id);
     if(!item.title.trim())throw Error("Evidence "+item.id+" needs a descriptive title.");
     if(item.status==="human_verified"&&!item.reviewer.trim())throw Error("A human reviewer code is needed for verified evidence "+item.id);
+    if(item.status==="human_verified"&&(!item.location.trim()||!item.note.trim()))
+      throw Error("A verified source needs a page/location and a supporting note: "+item.id);
     if(item.status!=="human_verified"&&item.reviewer.trim())throw Error("Reviewer attribution requires human-verified status for "+item.id);
   }
 }
@@ -85,7 +87,12 @@ export function buildDraftPackage(input:PackageInput,now:string=new Date().toISO
   const linked=(source:string)=>{
     const id=source.trim();
     if(!id)return null;
-    if(refs.has(id))return id;
+    const match=refs.get(id);
+    if(match){
+      if(match.status!=="human_verified")
+        sourceWarnings.add("Source "+id+" is "+match.status.replace("_"," ")+"; it is not verified evidence.");
+      return id;
+    }
     // Descriptive interview/provenance text is supported, not evidence-ID based.
     if(id.startsWith("SYN-EV-"))sourceWarnings.add("Unmatched evidence reference: "+id);
     return null;
