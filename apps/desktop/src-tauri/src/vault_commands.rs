@@ -5,14 +5,120 @@
 use serde::{Deserialize, Serialize};
 use soar_storage::sealed_vault::{
     authenticate_backup, open_practitioner, recover_and_rekey, seal_synthetic_case,
-    MAX_ENVELOPE_BYTES,
+    unlock_for_autosave, UnlockedSession, MAX_ENVELOPE_BYTES,
 };
 use std::{
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
 };
+use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
+
+struct ActiveVault {
+    path: PathBuf,
+    expected_cipher_hash: Vec<u8>,
+    session: UnlockedSession,
+}
+static AUTOSAVE: OnceLock<Mutex<Option<ActiveVault>>> = OnceLock::new();
+fn active() -> &'static Mutex<Option<ActiveVault>> {
+    AUTOSAVE.get_or_init(|| Mutex::new(None))
+}
+fn begin_autosave(path: &str, ciphertext: &[u8], passphrase: &str) -> Result<(), String> {
+    if Path::new(path).extension().and_then(|v| v.to_str()) != Some("soarvault") {
+        let mut guard = active().lock().map_err(|_| "Vault lock unavailable.")?;
+        *guard = None;
+        return Ok(());
+    }
+    let (_, session) = error_message(unlock_for_autosave(ciphertext, passphrase))?;
+    let mut guard = active().lock().map_err(|_| "Vault lock unavailable.")?;
+    *guard = Some(ActiveVault {
+        path: PathBuf::from(path),
+        expected_cipher_hash: Sha256::digest(ciphertext).to_vec(),
+        session,
+    });
+    Ok(())
+}
+/// Atomic ciphertext replacement; no plaintext written to disk. Retains the
+/// previous valid encrypted snapshot separately, to recover from interrupted
+/// writes. Any external edit detected by ciphertext digest halts autosave.
+fn atomic_ciphertext_replace(path: &Path, data: &[u8], expected_hash: &[u8]) -> Result<(), String> {
+    if path.extension().and_then(|e| e.to_str()) != Some("soarvault") {
+        return Err("Autosave only supports an unlocked .soarvault.".into());
+    }
+    let old_meta = fs::symlink_metadata(path).map_err(|_| "Vault disappeared; autosave stopped.".to_string())?;
+    if !old_meta.file_type().is_file() || old_meta.len() as usize > MAX_ENVELOPE_BYTES {
+        return Err("Vault is not a regular bounded file; autosave refused.".into());
+    }
+    let previous = fs::read(path).map_err(|_| "Cannot reread encrypted vault before autosave.".to_string())?;
+    if Sha256::digest(&previous).as_slice() != expected_hash {
+        return Err("Vault changed outside SOAR Desk. Autosave is paused to prevent lost updates.".into());
+    }
+    let dir = path.parent().ok_or("Invalid vault folder.")?;
+    let mut tmp = tempfile::Builder::new()
+        .prefix(".soar-ciphertext-")
+        .suffix(".tmp")
+        .tempfile_in(dir).map_err(|_| "Cannot create encrypted autosave temp file.".to_string())?;
+    tmp.write_all(data).and_then(|_| tmp.as_file().sync_all())
+        .map_err(|_| "Cannot write and sync encrypted autosave file.".to_string())?;
+    // Retain one encrypted previous version. It is NOT a complete disaster
+    // recovery backup; use the explicit .soarbackup export for that.
+    let mut old_tmp = tempfile::Builder::new()
+        .prefix(".soar-previous-")
+        .tempfile_in(dir).map_err(|_| "Cannot create encrypted previous-version file.".to_string())?;
+    old_tmp.write_all(&previous).and_then(|_| old_tmp.as_file().sync_all())
+        .map_err(|_| "Cannot sync the previous encrypted version.".to_string())?;
+    let mut previous_os = path.as_os_str().to_os_string();
+    previous_os.push(".previous");
+    let previous_path = PathBuf::from(previous_os);
+    old_tmp.persist(&previous_path)
+        .map_err(|_| "Cannot update encrypted previous version; autosave refused.".to_string())?;
+    tmp.persist(path).map_err(|_| "Cannot replace encrypted vault atomically.".to_string())?;
+    if let Ok(directory) = std::fs::File::open(dir) {
+        let _ = directory.sync_all();
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+pub struct SyntheticAutosaveRequest {
+    snapshot: serde_json::Value,
+    synthetic_confirmed: bool,
+}
+#[derive(Serialize)]
+pub struct SyntheticAutosaveStatus {
+    pub active: bool,
+    pub path: Option<String>,
+}
+#[tauri::command]
+pub fn synthetic_autosave_status() -> Result<SyntheticAutosaveStatus, String> {
+    let guard = active().lock().map_err(|_| "Vault lock unavailable.")?;
+    Ok(SyntheticAutosaveStatus {
+        active: guard.is_some(),
+        path: guard.as_ref().map(|a| a.path.display().to_string()),
+    })
+}
+#[tauri::command]
+pub fn autosave_synthetic_case(request: SyntheticAutosaveRequest) -> Result<SyntheticAutosaveStatus, String> {
+    is_synthetic_confirmation(request.synthetic_confirmed)?;
+    let snapshot = Zeroizing::new(
+        serde_json::to_vec(&request.snapshot).map_err(|_| "Invalid synthetic case snapshot.".to_string())?
+    );
+    let mut guard = active().lock().map_err(|_| "Vault lock unavailable.")?;
+    let current = guard.as_mut().ok_or("Create or unlock an encrypted case vault to enable automatic saving.")?;
+    // Encrypting does not mutate the disk; compare the current file first.
+    let bytes = error_message(current.session.encrypt_update(&snapshot))?;
+    atomic_ciphertext_replace(&current.path, &bytes, &current.expected_cipher_hash)?;
+    current.expected_cipher_hash = Sha256::digest(&bytes).to_vec();
+    Ok(SyntheticAutosaveStatus {active:true,path:Some(current.path.display().to_string())})
+}
+#[tauri::command]
+pub fn lock_synthetic_autosave() -> Result<(),String> {
+    let mut guard=active().lock().map_err(|_| "Vault lock unavailable.")?;
+    *guard=None;
+    Ok(())
+}
 
 #[derive(Deserialize)]
 pub struct CreateSyntheticVaultRequest {
@@ -118,6 +224,7 @@ pub fn create_synthetic_vault(
     );
     let sealed = error_message(seal_synthetic_case(&snapshot, &practitioner, &recovery))?;
     let path = new_encrypted_file(&request.output_path, "soarvault", &sealed)?;
+    begin_autosave(&path, &sealed, &practitioner)?;
     Ok(SealedFileResult {
         path,
         encrypted: true,
@@ -135,6 +242,7 @@ pub fn open_synthetic_vault(
     let plaintext = error_message(open_practitioner(&sealed, &passphrase))?;
     let value: serde_json::Value = serde_json::from_slice(&plaintext)
         .map_err(|_| "Opened file is not a valid fictional snapshot.".to_string())?;
+    begin_autosave(&request.input_path, &sealed, &passphrase)?;
     Ok(value)
 }
 #[tauri::command]
@@ -167,6 +275,9 @@ pub fn recover_synthetic_vault(
         &request.actor_code, &request.recovery_reason,
     ))?;
     let path = new_encrypted_file(&request.output_path, "soarvault", &encrypted)?;
+    // Recovery custodian must not gain normal editing access. The replacement
+    // practitioner must explicitly open the recovered vault.
+    lock_synthetic_autosave()?;
     Ok(SealedFileResult {
         path,
         encrypted: true,
