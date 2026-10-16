@@ -174,3 +174,35 @@ pub fn recover_synthetic_vault(
         note: "Emergency rewrap completed without returning case data. Old copies remain accessible with old credentials.".into(),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+    fn target(ext: &str) -> String {
+        // Only synthetic ciphertext is ever written; unique temp filenames for CI.
+        let nonce = SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir()
+            .join(format!("soar-training-{}-{}.{}", std::process::id(), nonce, ext))
+            .display()
+            .to_string()
+    }
+    #[test]
+    fn refuses_overwrite_and_wrong_file_types() {
+        let path=target("soarvault");
+        let output=new_encrypted_file(&path,"soarvault",b"synthetic-sealed-test").unwrap();
+        assert_eq!(output,path);
+        assert!(new_encrypted_file(&path,"soarvault",b"second-copy").is_err());
+        assert_eq!(std::fs::read(&path).unwrap(),b"synthetic-sealed-test");
+        std::fs::remove_file(&path).unwrap();
+        assert!(new_encrypted_file(&target("json"),"soarvault",b"ciphertext").is_err());
+    }
+    #[test]
+    fn refuses_empty_or_insecure_paths() {
+        assert!(new_encrypted_file("relative.soarvault","soarvault",b"bytes").is_err());
+        assert!(new_encrypted_file(&target("soarbackup"),"soarbackup",b"").is_err());
+        assert!(read_encrypted("relative.soarvault").is_err());
+    }
+}
