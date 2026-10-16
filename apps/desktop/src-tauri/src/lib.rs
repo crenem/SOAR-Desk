@@ -355,25 +355,36 @@ struct SyntheticPdfRequest {
     output_path: String,
     package: serde_json::Value,
     synthetic_confirmed: bool,
+    #[serde(default)]
+    local_risk_acknowledged: bool,
 }
 #[tauri::command]
 fn export_synthetic_ssa16_pdf(request: SyntheticPdfRequest) -> Result<serde_json::Value, String> {
+    render_ssa16_review_pdf(request,true)
+}
+#[tauri::command]
+fn export_local_ssa16_working_pdf(request: SyntheticPdfRequest) -> Result<serde_json::Value, String> {
+    render_ssa16_review_pdf(request,false)
+}
+fn render_ssa16_review_pdf(request: SyntheticPdfRequest,training:bool) -> Result<serde_json::Value, String> {
     use std::{
         io::Write,
         path::{Path, PathBuf},
         process::{Command, Stdio},
     };
-    if !request.synthetic_confirmed {
-        return Err("Confirm fictional training data before exporting a PDF.".into());
+    if training {
+        if !request.synthetic_confirmed || request.local_risk_acknowledged
+            || request.package.get("synthetic_only").and_then(|v|v.as_bool())!=Some(true)
+            || request.package.get("file_kind").and_then(|v|v.as_str())!=Some("soar-desk-synthetic-application-draft") {
+            return Err("Training export requires a synthetic-only draft and acknowledgment.".into());
+        }
+    } else if request.synthetic_confirmed || !request.local_risk_acknowledged
+        || request.package.get("synthetic_only").and_then(|v|v.as_bool())!=Some(false)
+        || request.package.get("file_kind").and_then(|v|v.as_str())!=Some("soar-desk-local-application-draft") {
+        return Err("Local SSA-16 working PDF requires a restricted local case and explicit privacy acknowledgment.".into());
     }
-    if request.package.get("synthetic_only").and_then(|v| v.as_bool()) != Some(true)
-        || request
-            .package
-            .pointer("/summary/ready_for_ssa_submission")
-            .and_then(|v| v.as_bool())
-            != Some(false)
-    {
-        return Err("This export accepts only non-submittable synthetic drafts.".into());
+    if request.package.pointer("/summary/ready_for_ssa_submission").and_then(|v|v.as_bool())!=Some(false) {
+        return Err("Export never certifies SSA submission readiness.".into());
     }
     let output = Path::new(&request.output_path);
     if !output.is_absolute() || output.extension().and_then(|e| e.to_str()) != Some("pdf") {
@@ -406,16 +417,17 @@ fn export_synthetic_ssa16_pdf(request: SyntheticPdfRequest) -> Result<serde_json
     let payload = serde_json::json!({
         "output_path": request.output_path,
         "template_path": source,
-        "synthetic_confirmed": true,
+        "synthetic_confirmed": training,
+        "local_risk_acknowledged": !training,
         "package": request.package,
     });
     if payload.to_string().len() > 2_000_000 {
-        return Err("Synthetic PDF payload exceeds the 2 MB limit.".into());
+        return Err("SSA review PDF payload exceeds the 2 MB limit.".into());
     }
     if let Some(mut stdin) = child.stdin.take() {
         stdin
             .write_all(payload.to_string().as_bytes())
-            .map_err(|e| format!("Cannot send synthetic data to local PDF worker: {e}"))?;
+            .map_err(|e| format!("Cannot send local review payload to PDF worker: {e}"))?;
     }
     let response = child.wait_with_output().map_err(|e| e.to_string())?;
     if !response.status.success() {
@@ -434,7 +446,7 @@ fn export_synthetic_ssa16_pdf(request: SyntheticPdfRequest) -> Result<serde_json
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text, extract_qwen_candidates, export_synthetic_draft, export_synthetic_ssa16_pdf, vault_commands::create_synthetic_vault, vault_commands::open_synthetic_vault, vault_commands::backup_synthetic_vault, vault_commands::recover_synthetic_vault, vault_commands::autosave_synthetic_case, vault_commands::synthetic_autosave_status, vault_commands::lock_synthetic_autosave, ssa_template_commands::ssa16_template_status, ssa_template_commands::install_ssa16_template])
+        .invoke_handler(tauri::generate_handler![evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text, extract_qwen_candidates, export_synthetic_draft, export_synthetic_ssa16_pdf, export_local_ssa16_working_pdf, vault_commands::create_synthetic_vault, vault_commands::open_synthetic_vault, vault_commands::backup_synthetic_vault, vault_commands::recover_synthetic_vault, vault_commands::autosave_synthetic_case, vault_commands::synthetic_autosave_status, vault_commands::lock_synthetic_autosave, ssa_template_commands::ssa16_template_status, ssa_template_commands::install_ssa16_template])
         .run(tauri::generate_context!())
         .expect("error starting SOAR Desk");
 }
