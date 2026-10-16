@@ -1,6 +1,6 @@
-import { useMemo,useState } from "react";
+import { useEffect,useMemo,useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open,save } from "@tauri-apps/plugin-dialog";
 import { buildDraftPackage,type PackageInput } from "./application-package";
 import VaultLab from "./VaultLab";
 
@@ -11,6 +11,29 @@ export default function PackageExport({input,onRestore}:Props){
  const [pdfBusy,setPdfBusy]=useState(false);
  const [pdfResult,setPdfResult]=useState("");
  const [pdfError,setPdfError]=useState("");
+ const [templateStatus,setTemplateStatus]=useState<{installed:boolean;message:string}|null>(null);
+ const [templateBusy,setTemplateBusy]=useState(false);
+ const [templateError,setTemplateError]=useState("");
+ useEffect(()=>{
+   let mounted=true;
+   invoke<{installed:boolean;message:string}>("ssa16_template_status")
+     .then(value=>{if(mounted)setTemplateStatus(value);})
+     .catch(error=>{if(mounted)setTemplateError(error instanceof Error?error.message:String(error));});
+   return ()=>{mounted=false;};
+ },[]);
+ async function installSsa16(){
+   setTemplateError("");
+   setTemplateBusy(true);
+   try{
+     const selected=await open({title:"Select the ORIGINAL BLANK SSA-16 (09-2025) PDF",
+       multiple:false,directory:false,filters:[{name:"Official SSA PDF",extensions:["pdf"]}]});
+     if(typeof selected!=="string")return;
+     const result=await invoke<{installed:boolean;message:string}>("install_ssa16_template",{sourcePath:selected});
+     setTemplateStatus(result);
+   }catch(error){setTemplateError(error instanceof Error?error.message:String(error));}
+   finally{setTemplateBusy(false);}
+ }
+
  const [result,setResult]=useState("");
  const [error,setError]=useState("");
  const preview=useMemo(()=>{
@@ -106,7 +129,14 @@ export default function PackageExport({input,onRestore}:Props){
     <h3>Original SSA-16 PDF — controlled training preview</h3>
     <p className="muted">Create a locally rendered, conspicuously watermarked copy of the <strong>September 2025 SSA-16</strong>. Only individually verified widget mappings are populated. Unmapped questions, real signatures, bank information and SSA-only fields remain blank.</p>
     <p className="hint">The seven-page original form layout is preserved. The output is an interactive XFA-based review copy, not a flattened or approved final filing form. SSA-3368 PDF field binding remains disabled pending independent source-template verification.</p>
-    <button type="button" className="secondary" disabled={pdfBusy||!acknowledged||!!preview.error||!input.programs.includes("ssdi")} onClick={exportSsa16Preview}>
+    <div className="example">
+      <strong>Blank SSA-16 template:</strong> {templateStatus?.message??"Checking local template..."}
+      <p className="hint">If SSA blocks automatic downloads, download the original PDF using a browser (or reuse your blank SSA-16 file) and select it here. SOAR Desk verifies it against the reviewed original before installing it. This does not upload the file.</p>
+      <button type="button" className="secondary" disabled={templateBusy}
+        onClick={installSsa16}>{templateBusy?"Verifying template...":"Install SSA-16 PDF from file…"}</button>
+      {templateError&&<p className="error" role="alert">{templateError}</p>}
+    </div>
+    <button type="button" className="secondary" disabled={pdfBusy||!acknowledged||!!preview.error||!input.programs.includes("ssdi")||!templateStatus?.installed} onClick={exportSsa16Preview}>
       {pdfBusy?"Rendering…":"Save synthetic SSA-16 PDF…"}
     </button>
     {pdfResult&&<p className="success" role="status">{pdfResult}</p>}
