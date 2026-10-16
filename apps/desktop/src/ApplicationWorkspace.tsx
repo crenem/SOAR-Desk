@@ -1,9 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { FORMS, FORM_BY_ID, applicable, progress, type AnswerStatus, type Answers, type Column, type FormId, type Program, type Response, type Rows, type Section } from "./forms";
 import SubmissionTracker from "./SubmissionTracker";
 import type { SubmissionLog } from "./ssa-submissions";
 import EvidenceRegister from "./EvidenceRegister";
 import PackageExport from "./PackageExport";
+import VaultLab from "./VaultLab";
+import type {PrefillSuggestion} from "./document-prefill";
+import {kindFor,inputMask,normalizeOnBlur,validateDisplay} from "./field-format";
 import type {EvidenceReference,PackageInput,SyntheticRecoveryEvent} from "./application-package";
 
 const emptyAnswer=():Response=>({value:"",status:"reported",source:""});
@@ -15,9 +19,11 @@ const statuses:{value:AnswerStatus;label:string}[]=[
 ];
 const display=(s:Response|undefined)=>s?.status==="unknown"?"Unknown":s?.value || "Not collected";
 const fieldsOf=(rows:Rows,key:string)=>rows[key]??[];
-type View="overview"|"interview"|"review"|"evidence"|"package"|"submissions";
+type View="overview"|"interview"|"review"|"evidence"|"package"|"submissions"|"casefiles";
+type Props={onCaseChange?:(ref:string)=>void;prefill?:PrefillSuggestion[];onPrefillApplied?:()=>void};
 
-export default function ApplicationWorkspace(){
+
+export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillApplied}:Props){
  const [programs,setPrograms]=useState<Program[]>(["ssi","ssdi"]);
  const [formId,setFormId]=useState<FormId>("SSA-3368-BK");
  const [section,setSection]=useState("identity");
@@ -29,6 +35,85 @@ export default function ApplicationWorkspace(){
  const [submissionLog,setSubmissionLog]=useState<SubmissionLog>({records:[],events:[]});
  const [evidence,setEvidence]=useState<EvidenceReference[]>([]);
  const [recoveryEvents,setRecoveryEvents]=useState<SyntheticRecoveryEvent[]>([]);
+ const [activeVault,setActiveVault]=useState<string|null>(null);
+ const [autosaveState,setAutosaveState]=useState("Create or unlock an encrypted vault to enable autosave.");
+ const [vaultMode,setVaultMode]=useState<"create"|"open">("open");
+ const [prefillSelected,setPrefillSelected]=useState<Record<string,boolean>>({});
+ const autosavePending=useRef(false);
+ const lastSaved=useRef("");
+ const snapshotRef=useRef<PackageInput>({
+   caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog,recoveryEvents
+ });
+ const currentSnapshot=useMemo<PackageInput>(()=>({
+   caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,
+   submissions:submissionLog,recoveryEvents
+ }),[caseLabel,programs,includeDeferred,answers,rows,evidence,submissionLog,recoveryEvents]);
+ snapshotRef.current=currentSnapshot;
+ useEffect(()=>{onCaseChange?.(caseLabel);},[caseLabel,onCaseChange]);
+ useEffect(()=>{setPrefillSelected(Object.fromEntries(prefill.map(p=>[p.key,!answers[p.key]?.value])));},
+   [prefill]); // Incoming review batch, never silent field replacement.
+ useEffect(()=>{
+   if(activeVault&&JSON.stringify(snapshotRef.current)!==lastSaved.current)
+     setAutosaveState("Unsaved changes · encrypted autosave due within 10 seconds");
+ },[activeVault,currentSnapshot]);
+ async function saveEncryptedNow(){
+   if(!activeVault||autosavePending.current)return;
+   const snapshot=snapshotRef.current;
+   const signature=JSON.stringify(snapshot);
+   if(signature===lastSaved.current)return;
+   autosavePending.current=true;
+   setAutosaveState("Encrypting and saving…");
+   try{
+     await invoke("autosave_synthetic_case",{request:{
+       snapshot:{
+         file_kind:"soar-desk-synthetic-case-snapshot",
+         schema_version:1,synthetic_only:true,case_reference:snapshot.caseReference,
+         programs:snapshot.programs,include_deferred:snapshot.includeDeferred,
+         answers:snapshot.answers,rows:snapshot.rows,evidence:snapshot.evidence,
+         submissions:snapshot.submissions,recovery_events:snapshot.recoveryEvents??[]
+       },synthetic_confirmed:true
+     }});
+     lastSaved.current=signature;
+     setAutosaveState(signature===JSON.stringify(snapshotRef.current)
+       ?"Encrypted · saved "+new Date().toLocaleTimeString()
+       :"Encrypted · newer changes waiting for next save");
+   }catch(error){
+     setAutosaveState("Autosave FAILED — "+String(error));
+   }finally{autosavePending.current=false;}
+ }
+ useEffect(()=>{
+   if(!activeVault)return;
+   const interval=window.setInterval(()=>{void saveEncryptedNow();},10_000);
+   return ()=>window.clearInterval(interval);
+ // Restart interval only when the selected vault changes.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[activeVault]);
+ function vaultReady(path:string|null){
+   setActiveVault(path);
+   lastSaved.current=path?JSON.stringify(snapshotRef.current):"";
+   setAutosaveState(path?"Encrypted case open · autosave every 10 seconds":
+      "No writable case vault open. Create or unlock a .soarvault.");
+ }
+ function applyPrefill(){
+   setAnswers(old=>{
+     const next={...old};
+     for(const item of prefill){
+       if(prefillSelected[item.key]&&!old[item.key]?.value){
+         next[item.key]={value:item.value,status:"reported",source:item.source};
+       }
+     }
+     return next;
+   });
+   onPrefillApplied?.();
+   setView("interview");
+   setFormId("SSA-3368-BK");
+   setSection("identity");
+ }
+ function openCaseFiles(mode:"create"|"open"){
+   setVaultMode(mode);
+   setView("casefiles");
+ }
+
  const activeForms=useMemo(()=>FORMS.filter(f=>f.programs.some(p=>programs.includes(p))&&(f.id!=="SSA-8001-BK"||includeDeferred)),[programs,includeDeferred]);
  const current=FORM_BY_ID[formId];
  const validCurrent=activeForms.some(f=>f.id===formId)?current:activeForms[0];
@@ -41,6 +126,10 @@ export default function ApplicationWorkspace(){
   if((captured>0||submissionLog.records.length>0||evidence.length>0)&&!window.confirm("Replace current synthetic case answers and CLEAR ALL IN-MEMORY evidence and submission records?"))return;
   setEvidence([]);
   setRecoveryEvents([]);
+  setActiveVault(null);
+  lastSaved.current="";
+  setAutosaveState("Synthetic demonstration loaded · create an encrypted vault to autosave.");
+  void invoke("lock_synthetic_autosave").catch(()=>{});
   setSubmissionLog({records:[],events:[]});
   const facts:Record<string,string>={
     "person.name":"Jane Doe", "person.phone":"No reliable telephone; use alternate contact with permission",
@@ -95,15 +184,25 @@ export default function ApplicationWorkspace(){
  }
  function addRow(group:string){setRows(old=>({...old,[group]:[...(old[group]??[]),{_status:"reported"}]}));}
  function removeRow(group:string,index:number){setRows(old=>({...old,[group]:(old[group]??[]).filter((_,i)=>i!==index)}));}
- function editor(key:string,value:string,kind:string,update:(v:string)=>void,options?:string[]){
+ function editor(key:string,value:string,kind:string,update:(v:string)=>void,options?:string[],fieldKey=key){
   if(kind==="yesno"||kind==="choice")return <select id={key} value={value} onChange={e=>update(e.target.value)}>
     <option value="">Not yet answered</option>
     {(kind==="yesno"?["yes","no"]:options??[]).map(o=><option value={o} key={o}>{o==="yes"?"Yes":o==="no"?"No":o}</option>)}
    </select>;
   if(kind==="long")return <textarea id={key} rows={3} value={value} onChange={e=>update(e.target.value)} placeholder="Record the person's actual answer"/>;
-  // Keep SSA dates as text; native date inputs normalize/assume missing month/day.
-  return <input id={key} type="text" inputMode={kind==="date"||kind==="month"?"numeric":"text"} value={value} onChange={e=>update(e.target.value)}
-    placeholder={kind==="date"?"MM/DD/YYYY":kind==="month"?"MM/YYYY":"Enter answer"}/>;
+  const format=kindFor(fieldKey,kind);
+  const issue=validateDisplay(format,value);
+  return <div className="formatted-field">
+    <input id={key} type="text" inputMode={["ssn","phone","weight","date","month"].includes(format)?"numeric":"text"}
+      value={value}
+      onChange={e=>update(inputMask(format,e.target.value))}
+      onBlur={()=>update(normalizeOnBlur(format,value))}
+      aria-invalid={!!issue}
+      placeholder={format==="ssn"?"000-00-0000":format==="phone"?"(318) 555-0100":
+        format==="height"?"5 ft 11 in":format==="weight"?"180 lb":
+        kind==="date"?"MM/DD/YYYY":kind==="month"?"MM/YYYY":"Enter answer"}/>
+    {issue&&<small className="field-warning" role="status">{issue}</small>}
+   </div>;
  }
  function renderQuestion(question:Section["questions"][number]){
   if(!applicable(question,answers))return null;
@@ -112,7 +211,7 @@ export default function ApplicationWorkspace(){
    <div className="intake-label"><strong>{question.label}</strong><span>{question.ref}</span></div>
    <label className="intake-control" htmlFor={"q-"+question.key}>
     <span className="sr-only">{question.label}</span>
-    {editor("q-"+question.key,r.value,question.kind,v=>change(question.key,{value:v,status:"reported"}),question.options)}
+    {editor("q-"+question.key,r.value,question.kind,v=>change(question.key,{value:v,status:"reported"}),question.options,question.key)}
    </label>
    {question.hint&&<p className="hint">{question.hint}</p>}
    <details className="intake-provenance"><summary>Answer source and review</summary>
@@ -128,7 +227,7 @@ export default function ApplicationWorkspace(){
  }
  function rowEditor(col:Column,value:string,changeValue:(v:string)=>void,group:string,index:number){
   return <label key={col.key}>{col.label}
-    {editor(`${group}-${index}-${col.key}`,value,col.kind??"text",changeValue,col.options)}
+    {editor(`${group}-${index}-${col.key}`,value,col.kind??"text",changeValue,col.options,col.key)}
    </label>;
  }
  function renderCollection(group:NonNullable<Section["collections"]>[number]){
@@ -153,11 +252,35 @@ export default function ApplicationWorkspace(){
  }
  return <div className="application-workspace">
    <div className="eyebrow">POST-SCREENING · ADULT SSI / SSDI</div>
+   <div className="case-file-toolbar">
+      <div className="case-file-actions">
+        <button type="button" className="primary" onClick={()=>openCaseFiles("open")}>Open / import case…</button>
+        <button type="button" className="secondary" onClick={()=>openCaseFiles("create")}>Save / export encrypted case…</button>
+        <button type="button" className="secondary" onClick={()=>setView("package")}>SSA document exports</button>
+      </div>
+      <div className="autosave-indicator" aria-live="polite"><strong>{activeVault?"Encrypted autosave · 10s":"Autosave needs vault setup"}</strong>
+        <span>{autosaveState}</span>
+        {activeVault&&<button type="button" className="linkbutton" onClick={()=>void saveEncryptedNow()}>Save now</button>}
+      </div>
+   </div>
+   {prefill.length>0&&<section className="panel prefill-review">
+     <h2>Review document prefill suggestions ({prefill.length})</h2>
+     <p className="muted">These values were explicitly labeled in an ingested document and marked human-verified. Select which blank case fields to prefill. Existing answers are never overwritten; accepted entries remain applicant-reported until independently confirmed.</p>
+     {prefill.map(item=><label className="checkline" key={item.key}>
+       <input type="checkbox" checked={!!prefillSelected[item.key]&&!answers[item.key]?.value} disabled={!!answers[item.key]?.value}
+         onChange={e=>setPrefillSelected(o=>({...o,[item.key]:e.target.checked}))}/>
+       <span><strong>{item.label}:</strong> {item.key==="person.ssn"?"[SSN from verified source]":item.value}
+       <small>Page {item.page} · {answers[item.key]?.value?"Existing case value preserved":"Verified source proposal"}</small></span>
+     </label>)}
+     <button type="button" className="primary" onClick={applyPrefill}>Apply selected blank-field suggestions</button>
+     <button type="button" className="secondary" onClick={()=>onPrefillApplied?.()}>Dismiss suggestions</button>
+   </section>}
+
    <h1>Application workspace</h1>
-   <p className="intro">One applicant interview, reusable facts, and separate SSA form sections. No real client information: this preview saves nothing. An SSA-16 watermarked training PDF can be generated, but no complete form can be submitted.</p>
+   <p className="intro">One applicant interview, reusable facts, and separate SSA form sections. No real client information: case edits are encrypted and autosaved only after a vault is created or unlocked. An SSA-16 watermarked training PDF can be generated, but no complete form can be submitted.</p>
    <div className="panel intake-setup">
      <div className="fieldgrid">
-      <label>Fictional case reference<input value={caseLabel} onChange={e=>setCaseLabel(e.target.value)} disabled={submissionLog.records.length>0} maxLength={80}/></label>
+      <label>Fictional case reference<input value={caseLabel} onChange={e=>setCaseLabel(e.target.value)} disabled={submissionLog.records.length>0||!!activeVault} maxLength={80}/></label>
       <div><strong>Applications being prepared</strong>
        <div className="intake-choices"><label className="checkline"><input type="checkbox" checked={programs.includes("ssi")} onChange={()=>chooseProgram("ssi")}/> SSI</label>
        <label className="checkline"><input type="checkbox" checked={programs.includes("ssdi")} onChange={()=>chooseProgram("ssdi")}/> SSDI</label></div>
@@ -169,7 +292,7 @@ export default function ApplicationWorkspace(){
      <button type="button" className="secondary" onClick={loadSyntheticExample}>Load synthetic Jane Doe example</button>
    </div>
    <div className="intake-tabs" role="group" aria-label="Application views">
-    {(["overview","interview","review","evidence","package","submissions"] as View[]).map(v=><button type="button" key={v} className={view===v?"active":""} onClick={()=>setView(v)}>{v==="overview"?"Form inventory":v==="interview"?"Guided interview":v==="review"?"Review gaps":v==="evidence"?"Evidence register":v==="package"?"Draft package":"Submissions & receipts"}</button>)}
+    {(["overview","interview","review","evidence","package","submissions","casefiles"] as View[]).map(v=><button type="button" key={v} className={view===v?"active":""} onClick={()=>setView(v)}>{v==="overview"?"Form inventory":v==="interview"?"Guided interview":v==="review"?"Review gaps":v==="evidence"?"Evidence register":v==="package"?"SSA exports":v==="casefiles"?"Case files":"Submissions & receipts"}</button>)}
    </div>
    {view==="overview"&&<section className="panel">
     <h2>Selected application forms</h2>
@@ -216,8 +339,8 @@ export default function ApplicationWorkspace(){
     <p><strong>Applicant:</strong> {display(answers["person.name"])} · <strong>Onset:</strong> {display(answers["work.onset"])} · <strong>Reported living arrangement:</strong> {display(answers["living.type"])}</p>
    </section>}
    {view==="evidence"&&<EvidenceRegister evidence={evidence} setEvidence={setEvidence}/>}
-   {view==="package"&&<PackageExport input={{caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog,recoveryEvents}} onRestore={restoreSyntheticCase}/>}
+   {view==="package"&&<PackageExport input={{caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog,recoveryEvents}}/>}\n   {view==="casefiles"&&<VaultLab input={currentSnapshot} onRestore={restoreSyntheticCase} onVaultReady={vaultReady} initialMode={vaultMode}/>}
    <div hidden={view!=="submissions"}><SubmissionTracker log={submissionLog} setLog={setSubmissionLog} caseReference={caseLabel} programs={programs}/></div>
-   <p className="hint">In-memory only · No autosave, transmission, official signature, or SSA eligibility decision. Verify form editions and complete all source questions before using any generated paperwork.</p>
+   <p className="hint">Synthetic-only encrypted autosave requires a writable unlocked case vault. No transmission, official signature, or SSA eligibility decision. Verify form editions and complete all source questions before using any generated paperwork.</p>
   </div>;
 }
