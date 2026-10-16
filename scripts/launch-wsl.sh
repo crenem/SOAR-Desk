@@ -83,11 +83,14 @@ fi
 
 server_pid=""
 if python3 "$ROOT/scripts/probe-geniex.py"; then
-  echo "Windows GenieX GGUF model responded successfully from WSL2."
-  echo "NPU backend preferred. Skipping Linux CPU model startup to conserve memory."
+  echo "GenieX GGUF passed a real JSON-generation test from WSL2."
+  echo "Using GenieX local inference; the actual GPU/NPU/CPU execution device is not verified by this probe."
+  echo "Skipping separate Linux CPU model startup to conserve memory."
   export SOAR_QWEN_BACKEND=auto
 else
-  echo "GenieX not reachable or incompatible from WSL2; retaining local CPU backend."
+  echo "GenieX generation readiness failed; selecting Linux CPU fallback for this launch."
+  echo "This does not imply GenieX is offline. A running server can return zero-token responses."
+  echo "For diagnostics: python3 \"$ROOT/scripts/probe-geniex.py\"; restart GenieX on Windows if zero-token output persists."
   export SOAR_QWEN_BACKEND=cpu
   if [[ ! -x "$LLAMA/build/bin/llama-server" ]]; then
     mkdir -p "$(dirname "$LLAMA")"
