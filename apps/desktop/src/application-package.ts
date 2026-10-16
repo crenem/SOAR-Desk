@@ -87,7 +87,7 @@ export function checkEvidence(evidence:EvidenceReference[],syntheticOnly=true):v
 }
 export function buildDraftPackage(input:PackageInput,now:string=new Date().toISOString()):DraftPackage{
   const training=input.syntheticOnly!==false;
-  if(!(training?validId:localId).test(input.caseReference))throw Error("Use a training SYN- ID or an opaque CASE- identifier for a restricted local case.");
+  if(!(training?validId:localId).test(input.caseReference))throw Error("Use a fictional case SYN- ID or an opaque CASE- identifier for a restricted local case.");
   if(input.programs.length===0)throw Error("Choose at least one intended benefits program.");
   if(!/^\d{4}-\d{2}-\d{2}T/.test(now)||!Number.isFinite(Date.parse(now)))throw Error("Invalid generation timestamp.");
   checkEvidence(input.evidence,training);
