@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/soar-core", "crates/soar-documents"]
+members = ["crates/soar-core", "crates/soar-documents", "crates/soar-storage"]
 exclude = ["apps/desktop/src-tauri"]
 resolver = "2"
 
