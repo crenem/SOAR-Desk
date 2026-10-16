@@ -35,7 +35,7 @@ Do NOT assume every SOAR provider is a HIPAA covered entity or business associat
 
 Stock SQLite, even on a BitLocker device, is insufficient as the sole protection for portable case data. SQLCipher provides transparent page encryption and integrity protections for database pages; we must verify its configuration, WAL/temp behavior and restore semantics on Windows ARM64. The database key comes from the vault key hierarchy, **not** a literal in code or environment variable.
 
-**No SQLCipher dependency is linked in the application yet.** Merely adding `soar-storage/migrations/0001_initial.sql` does not create an encrypted database. The migration is deliberately unusable with any enabled production file-writing path until SQLCipher, OS key management and RBAC are integrated and tested.
+**A synthetic-only, AES-GCM sealed JSON case prototype now exists (see [ENCRYPTED-VAULT-PROTOTYPE.md](ENCRYPTED-VAULT-PROTOTYPE.md)); it does not replace SQLCipher. No SQLCipher dependency is linked in the application yet.** Merely adding `soar-storage/migrations/0001_initial.sql` does not create an encrypted database. The migration is deliberately unusable with any enabled production file-writing path until SQLCipher, OS key management and RBAC are integrated and tested.
 
 ## Keys, authentication, unlock and recovery
 
@@ -90,13 +90,13 @@ This policy answers the question **who may authorize restoration**; it does not 
 5. **Backups:** the organization restores both encrypted database and encrypted attachments, verifying integrity, key version, and recoverability. Encrypted backups and recovery materials must not be in the same single failure domain.
 6. **Governance still open:** whether one designated custodian can approve an emergency, whether dual-control is required, how recovery secrets are physically stored, which cryptographic wrapping primitive is acceptable, and retention/incident-response rules.
 
-The new `soar-storage::recovery` module implements **metadata-only, fail-closed policy validation** for a distinct recovery custodian and two unlock-slot types. It contains no cryptographic implementation and does not write any real vault secrets.
+The `soar-storage::recovery` module still implements **metadata-only governance validation**. A separate experimental `soar-storage::sealed_vault` module now implements two Argon2id-wrapped slots around a random AES-256-GCM VMK for **synthetic standalone JSON snapshots** (not SQLCipher). It can rekey into a separate file without returning contents through the recovery UI, but lacks independently signed audit, OS-keystore credential management, real-organization identity checks and production authorization. See [ENCRYPTED-VAULT-PROTOTYPE.md](ENCRYPTED-VAULT-PROTOTYPE.md).
 
 ## Release gates (fail closed, no real-case switch before all pass)
 
 - [ ] Confirm deployment responsibility, HIPAA/contract/SSA constraints, case retention and staff roles.
 - [ ] Native Windows ARM64 packaging and OS security baseline (no WSL development deployment for PHI).
-- [ ] SQLCipher database setup, encrypted WAL/temp and migration test; reject plaintext database opens.
+- [ ] SQLCipher database setup, encrypted WAL/temp and migration test; reject plaintext database opens. (The synthetic sealed JSON vault prototype does not fulfill this.)
 - [ ] CSPRNG key generation, OS-backed wrapping and documented recovery/rotation path.
 - [ ] Authenticated AES-GCM attachment storage plus path, nonce, truncation and tampering tests.
 - [ ] Native desktop identity, role-based access and per-case permissions with negative tests.
