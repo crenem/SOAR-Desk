@@ -7,10 +7,10 @@ const vm=require("node:vm");
 const root=path.join(__dirname,"../src");
 const source=fs.readFileSync(path.join(root,"document-intake-policy.ts"),"utf8");
 const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
-const exports={};
-vm.runInNewContext(compiled,{exports});
-assert.equal(JSON.stringify(exports.analysisMode(true)),JSON.stringify({synthetic_confirmed:true,local_risk_acknowledged:false}));
-assert.equal(JSON.stringify(exports.analysisMode(false)),JSON.stringify({synthetic_confirmed:false,local_risk_acknowledged:true}));
+const moduleExports={};
+vm.runInNewContext(compiled,{exports:moduleExports});
+assert.equal(JSON.stringify(moduleExports.analysisMode(true)),JSON.stringify({synthetic_confirmed:true,local_risk_acknowledged:false}));
+assert.equal(JSON.stringify(moduleExports.analysisMode(false)),JSON.stringify({synthetic_confirmed:false,local_risk_acknowledged:true}));
 const ui=fs.readFileSync(path.join(root,"Documents.tsx"),"utf8");
 for(const command of ["extract_synthetic_document","classify_synthetic_text","extract_qwen_candidates","attach_evidence_document"]){
  const invocation=ui.split('"' + command + '"')[1];
