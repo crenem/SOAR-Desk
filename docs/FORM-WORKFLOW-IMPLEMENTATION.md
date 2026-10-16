@@ -1,6 +1,6 @@
 # Post-screening SSA application workflow — implemented pilot
 
-Status: **interactive, in-memory, synthetic-only starter**. Created 2026-10-16. Not approved by SSA and **not** capable of completing, signing, filing or transmitting federal forms. Read together with `docs/SSA-ADULT-SOAR-FORMS-CATALOG.md` and `docs/SSA-16-8001-WORKFLOW-MAP.md`.
+Status: **interactive, in-memory, synthetic-only starter**. Created 2026-10-16. Not approved by SSA and **not** capable of completing, signing, filing or transmitting federal forms. A controlled, watermarked partial SSA-16 PDF review copy is now possible; see [SSA-PDF-PREVIEW.md](SSA-PDF-PREVIEW.md). Read together with `docs/SSA-ADULT-SOAR-FORMS-CATALOG.md` and `docs/SSA-16-8001-WORKFLOW-MAP.md`.
 
 ## Implemented in the desktop
 
@@ -45,7 +45,7 @@ The internal `scripts/fetch-ssa-templates.sh` can optionally download unmodified
 ## Deliberately not yet implemented
 
 - Complete numbered and subpart-level crosswalks. **Only first-pass question coverage exists** for the five new forms and SSA-16. In particular, detailed SSI full application financial and household sub-branches, SSA-3369 each-job physical activity table, SSA-3368 all contacts/tests, SSA-3373 all individual activity checkboxes, and release witness legal scenarios still require full transcription/mapping.
-- Official PDF field names, XFA/AcroForm appearance population, complete synthetic render comparison, paper-form printing, electronically accepted signatures, and SSA-approved submission.
+- Complete PDF crosswalks and production rendering for all forms; only the controlled **partial SSA-16** synthetic field binding has been implemented and locally rendered. SSA-3368 widget discovery tooling exists, but its output is not yet an enabled PDF filler. Official signature capture, regulated production printing and SSA-approved submissions are still unimplemented.
 - State persistence, access permissions, audit/change logs, encryption, legal consent capture, or retention policies. Never input real client information.
 - Claim filing, protective filing dates and confirmation: should only reflect an independently verified SSA acknowledgment. No automatic service denial/benefits eligibility.
 - Integration of the document evidence proposal into reviewed application answers: model suggestions must never silently overwrite an applicant statement.
