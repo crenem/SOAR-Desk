@@ -1,4 +1,7 @@
 import { useState } from "react";
+import WindowChrome from "./WindowChrome";
+import ProgressNav from "./ProgressNav";
+import type {FormCoverage,MissingTarget} from "./form-navigation";
 import Documents from "./Documents";
 import ApplicationWorkspace from "./ApplicationWorkspace";
 import type {PrefillSuggestion} from "./document-prefill";
@@ -30,6 +33,8 @@ export default function App() {
   const [workspaceMode, setWorkspaceMode] = useState<"screening"|"documents"|"applications">("applications");
   const [caseReference,setCaseReference]=useState("SYN-APPLICATION-001");
   const [prefill,setPrefill]=useState<{caseReference:string;items:PrefillSuggestion[]}|null>(null);
+  const [formTree,setFormTree]=useState<FormCoverage[]>([]);
+  const [jump,setJump]=useState<{target:MissingTarget;token:number}|null>(null);
   const [answers, setAnswers] = useState(initialAnswers);
   const [sources, setSources] = useState<EvidenceSource[]>([syntheticSource]);
   const [functional, setFunctional] = useState<Partial<Record<Domain, Finding>>>({});
@@ -61,7 +66,7 @@ export default function App() {
   function reset() {
     setStep(0); setAnswers(initialAnswers()); setSources([syntheticSource]); setFunctional({}); setResult(null); setError(""); setReviewer(""); setReviewRationale(""); setDecision("RequestMoreEvidence"); setReviewComplete(false);
   }
-  return <div className="shell">
+  return <div className="desktop-frame"><WindowChrome/><div className="shell">
     <a href="#main" className="skip">Skip to main content</a>
     <aside className="sidebar" aria-label="Screening navigation">
       <div className="brand"><span aria-hidden="true" className="brandmark">✳</span><span>SOAR <strong>Desk</strong><small>Community edition</small></span></div>
@@ -71,6 +76,9 @@ export default function App() {
       <button type="button" className={workspaceMode==="documents"?"selected":""} onClick={()=>setWorkspaceMode("documents")}>Document evidence</button>
       <button type="button" className={workspaceMode==="screening"?"selected":""} onClick={()=>setWorkspaceMode("screening")}>Screening (optional)</button>
       </div>
+      {workspaceMode==="applications"&&<ProgressNav forms={formTree} onJump={target=>{
+        setJump(old=>({target,token:(old?.token??0)+1}));setWorkspaceMode("applications");
+      }}/>}
       {workspaceMode==="screening"&&<ol className="steps">{steps.map((label,index) => <li key={label}><button className={index === step ? "active" : ""} aria-current={step === index ? "step" : undefined} onClick={() => {setStep(index);setError("");}}><span className="stepnumber">{index + 1}</span>{label}</button></li>)}</ol>}
       <div className="side-note"><strong>Development preview</strong><p>Synthetic data only. Encrypted case saving is available after opening a fictional vault. No production identity, access controls, or PHI storage.</p></div>
     </aside>
@@ -80,6 +88,8 @@ export default function App() {
         onCaseChange={setCaseReference}
         prefill={prefill?.caseReference===caseReference?prefill.items:[]}
         onPrefillApplied={()=>setPrefill(null)}
+        onProgress={setFormTree}
+        navigate={jump}
       /></div>
       <div className="content" hidden={workspaceMode!=="documents"}><Documents caseReference={caseReference} onPrefill={(items,forCase)=>{
         setPrefill({caseReference:forCase,items});setWorkspaceMode("applications");
@@ -95,5 +105,5 @@ export default function App() {
       <div className="actions"><button type="button" className="secondary" onClick={reset}>Start over</button><div className="spacer"/><button type="button" className="secondary" disabled={step===0} onClick={()=>{setStep(s=>s-1);setError("");}}>Back</button><button type="button" className="primary" disabled={step===steps.length-1} onClick={()=>{setStep(s=>s+1);setError("");}}>Continue <span aria-hidden="true">→</span></button></div>
       </div> : null}
     </main>
-  </div>;
+  </div></div>;
 }
