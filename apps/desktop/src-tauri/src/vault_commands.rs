@@ -613,7 +613,7 @@ mod tests {
             source_path:src.clone(),case_reference:case_id.into(),
             synthetic_confirmed:true,local_risk_acknowledged:false
         }).unwrap();
-        assert_eq!(attached.bytes,35);
+        assert_eq!(attached.bytes,std::fs::metadata(&src).unwrap().len());
         let sealed=std::fs::read(&attached.encrypted_path).unwrap();
         assert!(!String::from_utf8_lossy(&sealed).contains("FICTIONAL MEDICAL RECORD ONLY"));
         assert!(export_evidence_document(ExportEvidenceRequest{
@@ -636,10 +636,8 @@ mod tests {
         assert_eq!(std::fs::read_dir(&backup_dir).unwrap().count(),1);
         lock_synthetic_autosave().unwrap();
         for file in [src,dest,vault,backup] {std::fs::remove_file(file).unwrap();}
-        for folder in [blob_folder(std::path::Path::new(&attached.encrypted_path)
-                   .parent().unwrap().parent().unwrap()),backup_dir] {
-            let _=std::fs::remove_dir_all(folder);
-        }
+        let _=std::fs::remove_dir_all(std::path::Path::new(&attached.encrypted_path).parent().unwrap());
+        let _=std::fs::remove_dir_all(backup_dir);
     }
 
     #[test]
