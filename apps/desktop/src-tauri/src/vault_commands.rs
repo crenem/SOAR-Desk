@@ -4,8 +4,8 @@
 //! Secrets arrive through Tauri IPC and may exist transiently in JS memory.
 use serde::{Deserialize, Serialize};
 use soar_storage::sealed_vault::{
-    authenticate_backup, open_practitioner, recover_and_rekey, seal_synthetic_case,
-    unlock_for_autosave, UnlockedSession, MAX_ENVELOPE_BYTES,
+    authenticate_backup, open_practitioner, recover_and_rekey, seal_local_case,
+    encrypted_file_is_synthetic, unlock_for_autosave, UnlockedSession, MAX_ENVELOPE_BYTES,
 };
 use std::{
     fs::{self, OpenOptions},
@@ -20,6 +20,7 @@ struct ActiveVault {
     path: PathBuf,
     expected_cipher_hash: Vec<u8>,
     session: UnlockedSession,
+    synthetic_only: bool,
 }
 static AUTOSAVE: OnceLock<Mutex<Option<ActiveVault>>> = OnceLock::new();
 fn active() -> &'static Mutex<Option<ActiveVault>> {
@@ -37,6 +38,7 @@ fn begin_autosave(path: &str, ciphertext: &[u8], passphrase: &str) -> Result<(),
         path: PathBuf::from(path),
         expected_cipher_hash: Sha256::digest(ciphertext).to_vec(),
         session,
+        synthetic_only:error_message(encrypted_file_is_synthetic(ciphertext))?,
     });
     Ok(())
 }
@@ -85,6 +87,8 @@ fn atomic_ciphertext_replace(path: &Path, data: &[u8], expected_hash: &[u8]) -> 
 pub struct SyntheticAutosaveRequest {
     snapshot: serde_json::Value,
     synthetic_confirmed: bool,
+    #[serde(default)]
+    local_risk_acknowledged: bool,
 }
 #[derive(Serialize)]
 pub struct SyntheticAutosaveStatus {
@@ -101,12 +105,14 @@ pub fn synthetic_autosave_status() -> Result<SyntheticAutosaveStatus, String> {
 }
 #[tauri::command]
 pub fn autosave_synthetic_case(request: SyntheticAutosaveRequest) -> Result<SyntheticAutosaveStatus, String> {
-    is_synthetic_confirmation(request.synthetic_confirmed)?;
+    let snapshot_mode=request.snapshot.get("synthetic_only").and_then(|v|v.as_bool()).ok_or("Missing mode.")?;
+    validate_local_ack(snapshot_mode,request.synthetic_confirmed,request.local_risk_acknowledged)?;
     let snapshot = Zeroizing::new(
         serde_json::to_vec(&request.snapshot).map_err(|_| "Invalid synthetic case snapshot.".to_string())?
     );
     let mut guard = active().lock().map_err(|_| "Vault lock unavailable.")?;
     let current = guard.as_mut().ok_or("Create or unlock an encrypted case vault to enable automatic saving.")?;
+    if current.synthetic_only!=snapshot_mode {return Err("Cannot switch an unlocked vault between training and local case mode.".into());}
     // Encrypting does not mutate the disk; compare the current file first.
     let bytes = error_message(current.session.encrypt_update(&snapshot))?;
     atomic_ciphertext_replace(&current.path, &bytes, &current.expected_cipher_hash)?;
@@ -127,12 +133,16 @@ pub struct CreateSyntheticVaultRequest {
     practitioner_passphrase: String,
     organization_recovery_passphrase: String,
     synthetic_confirmed: bool,
+    #[serde(default)]
+    local_risk_acknowledged: bool,
 }
 #[derive(Deserialize)]
 pub struct OpenSyntheticVaultRequest {
     input_path: String,
     practitioner_passphrase: String,
     synthetic_confirmed: bool,
+    #[serde(default)]
+    local_risk_acknowledged: bool,
 }
 #[derive(Deserialize)]
 pub struct BackupSyntheticVaultRequest {
@@ -140,6 +150,8 @@ pub struct BackupSyntheticVaultRequest {
     output_path: String,
     practitioner_passphrase: String,
     synthetic_confirmed: bool,
+    #[serde(default)]
+    local_risk_acknowledged: bool,
 }
 #[derive(Deserialize)]
 pub struct RecoverSyntheticVaultRequest {
@@ -151,6 +163,8 @@ pub struct RecoverSyntheticVaultRequest {
     actor_code: String,
     recovery_reason: String,
     synthetic_confirmed: bool,
+    #[serde(default)]
+    local_risk_acknowledged: bool,
 }
 #[derive(Serialize)]
 pub struct SealedFileResult {
@@ -203,45 +217,54 @@ fn new_encrypted_file(path: &str, extension: &str, data: &[u8]) -> Result<String
     }
     Ok(p.display().to_string())
 }
-fn is_synthetic_confirmation(ok: bool) -> Result<(), String> {
-    if !ok {
-        return Err("Only explicitly confirmed fictional training records are permitted.".into());
-    }
-    Ok(())
+fn validate_local_ack(synthetic:bool,training_confirmed:bool,risk_ack:bool)->Result<(),String>{
+    if synthetic && training_confirmed && !risk_ack {return Ok(());}
+    if !synthetic && !training_confirmed && risk_ack {return Ok(());}
+    Err("Confirm exactly one case mode. Local cases require an explicit privacy-risk acknowledgment and encrypted vault storage.".into())
+}
+fn validate_sealed_access(encrypted:&[u8],training:bool,risk:bool)->Result<bool,String>{
+    let synthetic=error_message(encrypted_file_is_synthetic(encrypted))?;
+    validate_local_ack(synthetic,training,risk)?;
+    Ok(synthetic)
 }
 fn error_message<T>(r: Result<T, soar_storage::sealed_vault::VaultCryptoError>) -> Result<T, String> {
-    r.map_err(|_| "Vault operation failed. Check the file, credentials, synthetic format and edition.".into())
+    r.map_err(|_| "Vault operation failed. Check the file, credentials, version and case format.".into())
 }
 #[tauri::command]
 pub fn create_synthetic_vault(
     request: CreateSyntheticVaultRequest,
 ) -> Result<SealedFileResult, String> {
-    is_synthetic_confirmation(request.synthetic_confirmed)?;
+    let synthetic = request.snapshot.get("synthetic_only").and_then(|v|v.as_bool()).ok_or("Missing case mode.")?;
+    validate_local_ack(synthetic,request.synthetic_confirmed,request.local_risk_acknowledged)?;
     let practitioner = Zeroizing::new(request.practitioner_passphrase);
     let recovery = Zeroizing::new(request.organization_recovery_passphrase);
     let snapshot = Zeroizing::new(
         serde_json::to_vec(&request.snapshot).map_err(|_| "Invalid synthetic snapshot.".to_string())?,
     );
-    let sealed = error_message(seal_synthetic_case(&snapshot, &practitioner, &recovery))?;
+    let sealed = error_message(seal_local_case(&snapshot, &practitioner, &recovery))?;
+    if error_message(encrypted_file_is_synthetic(&sealed))? != synthetic {
+        return Err("Case mode mismatch; encrypted file not created.".into());
+    }
     let path = new_encrypted_file(&request.output_path, "soarvault", &sealed)?;
     begin_autosave(&path, &sealed, &practitioner)?;
     Ok(SealedFileResult {
         path,
         encrypted: true,
-        synthetic_only: true,
-        note: "Fictional training snapshot; not SQLCipher or production PHI storage".into(),
+        synthetic_only: synthetic,
+        note: if synthetic {"Fictional training snapshot; not production PHI storage".into()}
+          else {"Encrypted local case snapshot v2. No SQLCipher, authenticated staff access or PHI compliance assessment; handle under approved organizational security policy.".into()},
     })
 }
 #[tauri::command]
 pub fn open_synthetic_vault(
     request: OpenSyntheticVaultRequest,
 ) -> Result<serde_json::Value, String> {
-    is_synthetic_confirmation(request.synthetic_confirmed)?;
     let passphrase = Zeroizing::new(request.practitioner_passphrase);
     let sealed = read_encrypted(&request.input_path)?;
+    validate_sealed_access(&sealed,request.synthetic_confirmed,request.local_risk_acknowledged)?;
     let plaintext = error_message(open_practitioner(&sealed, &passphrase))?;
     let value: serde_json::Value = serde_json::from_slice(&plaintext)
-        .map_err(|_| "Opened file is not a valid fictional snapshot.".to_string())?;
+        .map_err(|_| "Opened file is not a valid encrypted case snapshot.".to_string())?;
     begin_autosave(&request.input_path, &sealed, &passphrase)?;
     Ok(value)
 }
@@ -249,15 +272,15 @@ pub fn open_synthetic_vault(
 pub fn backup_synthetic_vault(
     request: BackupSyntheticVaultRequest,
 ) -> Result<SealedFileResult, String> {
-    is_synthetic_confirmation(request.synthetic_confirmed)?;
     let passphrase = Zeroizing::new(request.practitioner_passphrase);
     let sealed = read_encrypted(&request.input_path)?;
+    let synthetic=validate_sealed_access(&sealed,request.synthetic_confirmed,request.local_risk_acknowledged)?;
     error_message(authenticate_backup(&sealed, &passphrase))?;
     let path = new_encrypted_file(&request.output_path, "soarbackup", &sealed)?;
     Ok(SealedFileResult {
         path,
         encrypted: true,
-        synthetic_only: true,
+        synthetic_only: synthetic,
         note: "Exact authenticated ciphertext copy; no attachments or production restore policy".into(),
     })
 }
@@ -265,8 +288,8 @@ pub fn backup_synthetic_vault(
 pub fn recover_synthetic_vault(
     request: RecoverSyntheticVaultRequest,
 ) -> Result<SealedFileResult, String> {
-    is_synthetic_confirmation(request.synthetic_confirmed)?;
     let original = read_encrypted(&request.input_path)?;
+    let synthetic=validate_sealed_access(&original,request.synthetic_confirmed,request.local_risk_acknowledged)?;
     let old_recovery = Zeroizing::new(request.old_organization_passphrase);
     let next_practitioner = Zeroizing::new(request.new_practitioner_passphrase);
     let next_recovery = Zeroizing::new(request.new_organization_passphrase);
@@ -281,7 +304,7 @@ pub fn recover_synthetic_vault(
     Ok(SealedFileResult {
         path,
         encrypted: true,
-        synthetic_only: true,
+        synthetic_only: synthetic,
         note: "Emergency rewrap completed without returning case data. Old copies remain accessible with old credentials.".into(),
     })
 }
@@ -339,25 +362,25 @@ mod tests {
             output_path:original.clone(),snapshot:payload.clone(),
             practitioner_passphrase:OP.into(),
             organization_recovery_passphrase:ORG.into(),
-            synthetic_confirmed:true
+            synthetic_confirmed:true,local_risk_acknowledged:false
         }).unwrap();
         let mut file=std::fs::read(&original).unwrap();
         assert!(!String::from_utf8_lossy(&file).contains("Fictional Jane Doe"));
         let reopened=open_synthetic_vault(OpenSyntheticVaultRequest {
             input_path:original.clone(),practitioner_passphrase:OP.into(),
-            synthetic_confirmed:true
+            synthetic_confirmed:true,local_risk_acknowledged:false
         }).unwrap();
         assert_eq!(reopened,payload);
         assert!(open_synthetic_vault(OpenSyntheticVaultRequest {
             input_path:original.clone(),practitioner_passphrase:ORG.into(),
-            synthetic_confirmed:true
+            synthetic_confirmed:true,local_risk_acknowledged:false
         }).is_err());
         // Autosave encrypts a changed snapshot, retains the prior encrypted
         // generation, and never writes identifiable plaintext to disk.
         let mut revision=payload.clone();
         revision["answers"]["person.name"]["value"]=serde_json::json!("Fictional autosaved name");
         let status=autosave_synthetic_case(SyntheticAutosaveRequest {
-            snapshot:revision.clone(),synthetic_confirmed:true
+            snapshot:revision.clone(),synthetic_confirmed:true,local_risk_acknowledged:false
         }).unwrap();
         assert!(status.active);
         let latest=std::fs::read(&original).unwrap();
@@ -368,11 +391,11 @@ mod tests {
         file=latest;
         assert_eq!(open_synthetic_vault(OpenSyntheticVaultRequest {
             input_path:original.clone(),practitioner_passphrase:OP.into(),
-            synthetic_confirmed:true
+            synthetic_confirmed:true,local_risk_acknowledged:false
         }).unwrap(),revision);
         backup_synthetic_vault(BackupSyntheticVaultRequest {
             input_path:original.clone(),output_path:backup.clone(),
-            practitioner_passphrase:OP.into(),synthetic_confirmed:true
+            practitioner_passphrase:OP.into(),synthetic_confirmed:true,local_risk_acknowledged:false
         }).unwrap();
         assert_eq!(std::fs::read(&backup).unwrap(),file);
         recover_synthetic_vault(RecoverSyntheticVaultRequest {
@@ -382,15 +405,15 @@ mod tests {
             new_organization_passphrase:NEW_ORG.into(),
             actor_code:"SYN-ORGANIZATION-RECOVERY".into(),
             recovery_reason:"Fictional practitioner device retirement and approved handoff".into(),
-            synthetic_confirmed:true
+            synthetic_confirmed:true,local_risk_acknowledged:false
         }).unwrap();
         assert!(open_synthetic_vault(OpenSyntheticVaultRequest {
             input_path:recovered.clone(),practitioner_passphrase:OP.into(),
-            synthetic_confirmed:true
+            synthetic_confirmed:true,local_risk_acknowledged:false
         }).is_err());
         let new_case=open_synthetic_vault(OpenSyntheticVaultRequest {
             input_path:recovered.clone(),practitioner_passphrase:NEW_OP.into(),
-            synthetic_confirmed:true
+            synthetic_confirmed:true,local_risk_acknowledged:false
         }).unwrap();
         assert!(new_case["recovery_events"].is_array());
         assert_eq!(new_case["case_reference"],"SYN-CASE-TEST");
