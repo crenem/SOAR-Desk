@@ -28,6 +28,8 @@ try {
     }
     $model = [string]$candidate[0]
     $successful = 0
+    $minimalWorked = $false
+    $explicitThinkFailed = $false
     foreach ($thinkingFlag in @($null, $false)) {
         $payload = @{
             model = $model
@@ -48,12 +50,19 @@ try {
             if ($answer.Trim()) {
                 Write-Host ("Assistant sample: " + $answer.Substring(0, [Math]::Min(120, $answer.Length)))
                 $successful++
+                if ($null -eq $thinkingFlag) { $minimalWorked = $true }
             } else {
+                if ($null -ne $thinkingFlag) { $explicitThinkFailed = $true }
                 Write-Host "Assistant output was empty."
             }
         } catch {
             Write-Host ("Inference request error: " + $_.Exception.Message)
         }
+    }
+    if ($minimalWorked -and $explicitThinkFailed) {
+        Write-Host "RESULT: GenieX GGUF succeeds when enable_think is OMITTED, but returns empty output when explicitly false."
+        Write-Host "SOAR Desk should omit enable_think for this GGUF backend; restart the app after updating."
+        exit 0
     }
     if ($successful -gt 0) {
         Write-Host "RESULT: Windows GenieX HTTP can generate text. Compare with WSL2."
