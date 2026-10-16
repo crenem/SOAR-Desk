@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { FORMS, FORM_BY_ID, applicable, progress, type AnswerStatus, type Answers, type Column, type FormId, type Program, type Response, type Rows, type Section } from "./forms";
+import SubmissionTracker from "./SubmissionTracker";
+import type { SubmissionLog } from "./ssa-submissions";
 
 const emptyAnswer=():Response=>({value:"",status:"reported",source:""});
 const statuses:{value:AnswerStatus;label:string}[]=[
@@ -10,7 +12,7 @@ const statuses:{value:AnswerStatus;label:string}[]=[
 ];
 const display=(s:Response|undefined)=>s?.status==="unknown"?"Unknown":s?.value || "Not collected";
 const fieldsOf=(rows:Rows,key:string)=>rows[key]??[];
-type View="overview"|"interview"|"review";
+type View="overview"|"interview"|"review"|"submissions";
 
 export default function ApplicationWorkspace(){
  const [programs,setPrograms]=useState<Program[]>(["ssi","ssdi"]);
@@ -21,6 +23,7 @@ export default function ApplicationWorkspace(){
  const [rows,setRows]=useState<Rows>({});
  const [includeDeferred,setIncludeDeferred]=useState(false);
  const [caseLabel,setCaseLabel]=useState("SYN-APPLICATION-001");
+ const [submissionLog,setSubmissionLog]=useState<SubmissionLog>({records:[],events:[]});
  const activeForms=useMemo(()=>FORMS.filter(f=>f.programs.some(p=>programs.includes(p))&&(f.id!=="SSA-8001-BK"||includeDeferred)),[programs,includeDeferred]);
  const current=FORM_BY_ID[formId];
  const validCurrent=activeForms.some(f=>f.id===formId)?current:activeForms[0];
@@ -30,7 +33,8 @@ export default function ApplicationWorkspace(){
  const possible=total.reduce((n,x)=>n+x.p.total,0);
  const sections=validCurrent?.sections??[];
  function loadSyntheticExample(){
-  if(captured>0&&!window.confirm("Replace current in-memory synthetic interview answers with the fictional demonstration case?"))return;
+  if((captured>0||submissionLog.records.length>0)&&!window.confirm("Replace current synthetic case answers and CLEAR ALL IN-MEMORY submission records?"))return;
+  setSubmissionLog({records:[],events:[]});
   const facts:Record<string,string>={
     "person.name":"Jane Doe", "person.phone":"No reliable telephone; use alternate contact with permission",
     "person.language":"English","work.current":"stopped","work.onset":"03/12/2024",
@@ -132,7 +136,7 @@ export default function ApplicationWorkspace(){
    <p className="intro">One applicant interview, reusable facts, and separate SSA form sections. No real client information: this preview saves nothing and does not generate or submit official forms.</p>
    <div className="panel intake-setup">
      <div className="fieldgrid">
-      <label>Fictional case reference<input value={caseLabel} onChange={e=>setCaseLabel(e.target.value)} maxLength={80}/></label>
+      <label>Fictional case reference<input value={caseLabel} onChange={e=>setCaseLabel(e.target.value)} disabled={submissionLog.records.length>0} maxLength={80}/></label>
       <div><strong>Applications being prepared</strong>
        <div className="intake-choices"><label className="checkline"><input type="checkbox" checked={programs.includes("ssi")} onChange={()=>chooseProgram("ssi")}/> SSI</label>
        <label className="checkline"><input type="checkbox" checked={programs.includes("ssdi")} onChange={()=>chooseProgram("ssdi")}/> SSDI</label></div>
@@ -140,10 +144,11 @@ export default function ApplicationWorkspace(){
      </div>
      <label className="checkline"><input type="checkbox" checked={includeDeferred} onChange={e=>setIncludeDeferred(e.target.checked)}/> Show SSA-8001 deferred/abbreviated SSI as a reference (not the default)</label>
      <p className="hint">Application pathways reflect your manual case planning, not an automated determination of eligibility or whether each form is required.</p>
+     {submissionLog.records.length>0&&<p className="hint">Case reference is locked while this in-memory session contains submission records. Loading the demo anew clears these records after confirmation.</p>}
      <button type="button" className="secondary" onClick={loadSyntheticExample}>Load synthetic Jane Doe example</button>
    </div>
    <div className="intake-tabs" role="group" aria-label="Application views">
-    {(["overview","interview","review"] as View[]).map(v=><button type="button" key={v} className={view===v?"active":""} onClick={()=>setView(v)}>{v==="overview"?"Form inventory":v==="interview"?"Guided interview":"Review gaps"}</button>)}
+    {(["overview","interview","review","submissions"] as View[]).map(v=><button type="button" key={v} className={view===v?"active":""} onClick={()=>setView(v)}>{v==="overview"?"Form inventory":v==="interview"?"Guided interview":v==="review"?"Review gaps":"Submissions & receipts"}</button>)}
    </div>
    {view==="overview"&&<section className="panel">
     <h2>Selected application forms</h2>
@@ -189,6 +194,7 @@ export default function ApplicationWorkspace(){
     <p><strong>Current synthetic case:</strong> {caseLabel}</p>
     <p><strong>Applicant:</strong> {display(answers["person.name"])} · <strong>Onset:</strong> {display(answers["work.onset"])} · <strong>Reported living arrangement:</strong> {display(answers["living.type"])}</p>
    </section>}
+   <div hidden={view!=="submissions"}><SubmissionTracker log={submissionLog} setLog={setSubmissionLog} caseReference={caseLabel} programs={programs}/></div>
    <p className="hint">In-memory only · No autosave, transmission, official signature, or SSA eligibility decision. Verify form editions and complete all source questions before using any generated paperwork.</p>
   </div>;
 }
