@@ -1,0 +1,11 @@
+[package]
+name = "soar-storage"
+version = "0.1.0"
+description = "Versioned, security-gated SOAR case storage contracts"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
