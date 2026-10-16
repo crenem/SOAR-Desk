@@ -1,11 +1,12 @@
 {
   "identifier": "default",
-  "description": "Native open-file dialog only; no general filesystem or network plugin.",
+  "description": "Native open/save dialogs for synthetic-only files; no unrestricted frontend filesystem or network plugin.",
   "windows": [
     "main"
   ],
   "permissions": [
     "core:default",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    "dialog:allow-save"
   ]
 }
