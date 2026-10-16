@@ -11,13 +11,14 @@ vm.runInNewContext(js,{exports:out,require}, {filename:"forms.compiled.cjs"});
 const {FORMS,FORM_BY_ID,applicable,progress}=out;
 
 assert.equal(FORMS.length,7);
-for(const id of ["SSA-8000-BK","SSA-3368-BK","SSA-827","SSA-3369-BK","SSA-3373-BK"]){
+for(const id of ["SSA-16","SSA-8000-BK","SSA-3368-BK","SSA-827","SSA-3369-BK","SSA-3373-BK"]){
  const f=FORM_BY_ID[id];assert.ok(f&&!f.referenceOnly, id+" needs a real interview");
  assert.ok(f.url.startsWith("https://www.ssa.gov/forms/"));
  assert.ok(f.sections.length>=2);
 }
 assert.equal(FORM_BY_ID["SSA-8001-BK"].referenceOnly,true);
-assert.equal(FORM_BY_ID["SSA-16"].referenceOnly,true);
+assert.notEqual(FORM_BY_ID["SSA-16"].referenceOnly,true);
+assert.ok(FORM_BY_ID["SSA-16"].sections.some(section=>section.questions.some(q=>q.ref==="20.a")));
 
 const extra=FORM_BY_ID["SSA-8000-BK"].sections.find(s=>s.id==="living").questions;
 const household=extra.find(q=>q.key==="living.household");
