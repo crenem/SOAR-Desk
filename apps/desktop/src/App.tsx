@@ -5,6 +5,7 @@ import type {FormCoverage,MissingTarget} from "./form-navigation";
 import Documents from "./Documents";
 import ApplicationWorkspace from "./ApplicationWorkspace";
 import type {PrefillSuggestion} from "./document-prefill";
+import type {AttachedSource} from "./evidence-attachment";
 import { invoke } from "@tauri-apps/api/core";
 
 type Status = "Documented" | "Reported" | "Unknown" | "NotSupported";
@@ -35,6 +36,7 @@ export default function App() {
   const [syntheticOnly,setSyntheticOnly]=useState(true);
   const [prefill,setPrefill]=useState<{caseReference:string;items:PrefillSuggestion[]}|null>(null);
   const [formTree,setFormTree]=useState<FormCoverage[]>([]);
+  const [inboundEvidence,setInboundEvidence]=useState<{source:AttachedSource;caseReference:string;sequence:number}|null>(null);
   const [jump,setJump]=useState<{target:MissingTarget;token:number}|null>(null);
   const [answers, setAnswers] = useState(initialAnswers);
   const [sources, setSources] = useState<EvidenceSource[]>([syntheticSource]);
@@ -92,9 +94,14 @@ export default function App() {
         onPrefillApplied={()=>setPrefill(null)}
         onProgress={setFormTree}
         navigate={jump}
+        inboundEvidence={inboundEvidence}
+        onEvidenceReceived={()=>setInboundEvidence(null)}
       /></div>
       <div className="content" hidden={workspaceMode!=="documents"}><Documents caseReference={caseReference} syntheticOnly={syntheticOnly} onPrefill={(items,forCase)=>{
         setPrefill({caseReference:forCase,items});setWorkspaceMode("applications");
+      }} onEvidenceAttached={(source,forCase)=>{
+        setInboundEvidence(old=>({source,caseReference:forCase,sequence:(old?.sequence??0)+1}));
+        setWorkspaceMode("applications");
       }}/></div>
       {workspaceMode==="screening" ? <div className="content"><div className="eyebrow">STEP {step + 1} OF {steps.length}</div><h1>{steps[step]}</h1>
       <p className="intro">This tool organizes preliminary service triage. It does not determine SSA eligibility or prevent an applicant from applying.</p>
