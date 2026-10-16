@@ -4,7 +4,7 @@ import SubmissionTracker from "./SubmissionTracker";
 import type { SubmissionLog } from "./ssa-submissions";
 import EvidenceRegister from "./EvidenceRegister";
 import PackageExport from "./PackageExport";
-import type {EvidenceReference,PackageInput} from "./application-package";
+import type {EvidenceReference,PackageInput,SyntheticRecoveryEvent} from "./application-package";
 
 const emptyAnswer=():Response=>({value:"",status:"reported",source:""});
 const statuses:{value:AnswerStatus;label:string}[]=[
@@ -28,6 +28,7 @@ export default function ApplicationWorkspace(){
  const [caseLabel,setCaseLabel]=useState("SYN-APPLICATION-001");
  const [submissionLog,setSubmissionLog]=useState<SubmissionLog>({records:[],events:[]});
  const [evidence,setEvidence]=useState<EvidenceReference[]>([]);
+ const [recoveryEvents,setRecoveryEvents]=useState<SyntheticRecoveryEvent[]>([]);
  const activeForms=useMemo(()=>FORMS.filter(f=>f.programs.some(p=>programs.includes(p))&&(f.id!=="SSA-8001-BK"||includeDeferred)),[programs,includeDeferred]);
  const current=FORM_BY_ID[formId];
  const validCurrent=activeForms.some(f=>f.id===formId)?current:activeForms[0];
@@ -39,6 +40,7 @@ export default function ApplicationWorkspace(){
  function loadSyntheticExample(){
   if((captured>0||submissionLog.records.length>0||evidence.length>0)&&!window.confirm("Replace current synthetic case answers and CLEAR ALL IN-MEMORY evidence and submission records?"))return;
   setEvidence([]);
+  setRecoveryEvents([]);
   setSubmissionLog({records:[],events:[]});
   const facts:Record<string,string>={
     "person.name":"Jane Doe", "person.phone":"No reliable telephone; use alternate contact with permission",
@@ -71,6 +73,7 @@ export default function ApplicationWorkspace(){
   setAnswers({...saved.answers});
   setRows({...saved.rows});
   setEvidence([...saved.evidence]);
+  setRecoveryEvents([...(saved.recoveryEvents??[])]);
   setSubmissionLog({records:[...saved.submissions.records],events:[...saved.submissions.events]});
   setFormId("SSA-3368-BK");
   setSection("identity");
@@ -213,7 +216,7 @@ export default function ApplicationWorkspace(){
     <p><strong>Applicant:</strong> {display(answers["person.name"])} · <strong>Onset:</strong> {display(answers["work.onset"])} · <strong>Reported living arrangement:</strong> {display(answers["living.type"])}</p>
    </section>}
    {view==="evidence"&&<EvidenceRegister evidence={evidence} setEvidence={setEvidence}/>}
-   {view==="package"&&<PackageExport input={{caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog}} onRestore={restoreSyntheticCase}/>}
+   {view==="package"&&<PackageExport input={{caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog,recoveryEvents}} onRestore={restoreSyntheticCase}/>}
    <div hidden={view!=="submissions"}><SubmissionTracker log={submissionLog} setLog={setSubmissionLog} caseReference={caseLabel} programs={programs}/></div>
    <p className="hint">In-memory only · No autosave, transmission, official signature, or SSA eligibility decision. Verify form editions and complete all source questions before using any generated paperwork.</p>
   </div>;
