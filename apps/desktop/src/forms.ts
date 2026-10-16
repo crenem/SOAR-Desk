@@ -95,7 +95,68 @@ form("SSA-8000-BK","Full SSI Application","09-2024",24,"https://www.ssa.gov/form
  {id:"income",title:"Part 4 · Income",pages:"16–19",questions:[q("income.period","49","Identify months of income and future estimates","long"),q("income.other","Part 4","Bills paid by others or other contributions","long")],collections:[income]},
  {id:"other",title:"Parts 5–8 · Programs, permissions and signatures",pages:"19–22",questions:[yn("ssi.snap","57","Receiving SNAP?"),yn("ssi.health","58","Other medical coverage?"),yn("ssi.financialPermission","Part 8","Granted SSA financial-record access?"),q("ssi.remarks","Part 7","Item-numbered remarks","long"),choose("ssi.signed","62","Physical application signature",["not_requested","awaiting_ink_signature","signed_on_paper","needs_review"])]}
 ]),
-form("SSA-16","Disability Insurance Application","09-2025",7,"https://www.ssa.gov/forms/ssa-16-bk.pdf",["ssdi"],"application","Already inventoried. Full field interview not yet implemented.",[],true),
+form("SSA-16","Disability Insurance Application","09-2025",7,"https://www.ssa.gov/forms/ssa-16-bk.pdf",["ssdi"],"application",
+ "Guided first-pass coverage of numbered questions 1–24 and the signature page. Structured spouse/child continuations and print mapping remain unfinished.",[
+ {id:"basic",title:"Questions 1–10 · Basic facts and onset",pages:"1",questions:[
+ q("person.name","1","Applicant name"),q("person.ssn","2","Social Security number"),
+ q("person.language","3","Preferred spoken language (if not English)"),q("person.writtenLanguage","3","Preferred written language (if not English)"),
+ q("person.dob","4.a","Date of birth","date"),q("person.birthplace","4.b","Place of birth"),
+ yn("ssdi.citizen","5.a","U.S. citizen?"),conditional("ssdi.lawful","5.b","Lawfully present in United States?","ssdi.citizen","no","yesno"),
+ conditional("ssdi.admitted","5.c","When lawfully admitted?","ssdi.lawful","yes","date"),
+ q("person.birthName","6.a","Name at birth, if different"),yn("person.othernames","6.b","Other names used?"),
+ conditional("person.othernamesText","6.c","Other names","person.othernames"),
+ yn("ssdi.otherSSNs","7.a","Other Social Security numbers used?"),
+ conditional("ssdi.otherNumbers","7.b","Other SSNs","ssdi.otherSSNs"),
+ q("work.onset","8","When did conditions become severe enough to keep you from working?","date"),
+ yn("ssdi.railroad","9","Did you or your spouse/prior spouse work in the railroad industry for at least five years?"),
+ yn("ssdi.foreignCredits","10.a","Social Security credits under another country's system?"),
+ conditional("ssdi.foreignCountry","10.b","Country or countries","ssdi.foreignCredits")
+ ]},
+ {id:"family",title:"Questions 11–12 · Marriage and family",pages:"2",questions:[
+ yn("person.marriedEver","11.a","Ever married?"),
+ conditional("person.currentSpouse","11.b","Current spouse and marriage details, or None","person.marriedEver"),
+ q("ssdi.priorMarriage","11.c","Qualifying other marriage(s), including dates and end circumstances","long"),
+ q("ssdi.specialMarriage","11.d","Relevant marriage to deceased parent of a qualifying child","long"),
+ q("ssdi.children","12","Unmarried children/dependent grandchildren who meet the age or disability categories","long")
+ ]},
+ {id:"work",title:"Questions 13–19 · Covered employment and income",pages:"3",questions:[
+ yn("ssdi.coveredAllYears","13.a","Covered wages/self-employment in every year from 1978 through last year?"),
+ conditional("ssdi.uncoveredYears","13.b","Years without covered earnings","ssdi.coveredAllYears","no"),
+ q("ssdi.employers","14","Employers this year and last year: name, address and employment dates","long"),
+ yn("ssdi.selfEmployed","15.a","Self-employed this year or last year?"),
+ conditional("ssdi.selfDetails","15.b","Years, trade/business and net earnings of $400 or more","ssdi.selfEmployed"),
+ q("ssdi.lastYearEarnings","16.a","Total wages and self-employment earnings last year"),
+ q("ssdi.thisYearEarnings","16.b","Total earnings so far this year"),
+ yn("ssdi.stillUnable","17.a","Still unable to work because of conditions?"),
+ conditional("ssdi.ableDate","17.b","Date became able to work","ssdi.stillUnable","no","date"),
+ yn("ssdi.workRelated","18","Are conditions related to work in any way?"),
+ yn("ssdi.vision","19","Blind or low vision even with correction?")
+ ]},
+ {id:"other",title:"Questions 20–24 · Other benefits and relationships",pages:"4",questions:[
+ yn("ssdi.otherBenefits","20.a","Filed or intend to file for other public disability benefits (including SSI)?"),
+ conditional("ssdi.otherBenefitType","20.b","VA, welfare, SSI, workers' compensation or other benefit(s)","ssdi.otherBenefits"),
+ yn("ssdi.paidAfterOnset","21.a","Employer money paid on/after onset date?"),
+ conditional("ssdi.afterOnsetAmount","21.a","Amount and reason in Remarks","ssdi.paidAfterOnset"),
+ yn("ssdi.expectPay","21.b","Expect additional employer money (sick, vacation, special pay)?"),
+ conditional("ssdi.expectedPay","21.b","Amounts and explanation","ssdi.expectPay"),
+ yn("ssdi.childUnder3","22","Child under three lived with you during any calendar year with no earnings?"),
+ yn("ssdi.parentSupport","23","Dependent parent received at least half support when you became unable to work?"),
+ conditional("ssdi.parentDetails","23","Parent's identifying and contact details","ssdi.parentSupport"),
+ choose("ssdi.before22","24","If unable to work before age 22, parent/grandparent receiving SSA benefits or deceased?",["yes","no","unknown"]),
+ conditional("ssdi.before22Details","24","Name and SSN, if known","ssdi.before22")
+ ]},
+ {id:"signature",title:"Applicant attestation, payment and address",pages:"5",questions:[
+ q("ssdi.remarks","Remarks","Item-numbered explanations and continuation notes","long"),
+ q("person.phone","Telephone","Daytime telephone"),q("person.mail","Mailing address"),
+ q("ssdi.residence","Residence different from mailing address (if applicable)"),
+ choose("ssdi.depositChoice","Direct deposit","Payment method",["checking","savings","direct_express","direct_deposit_refused"]),
+ q("ssdi.depositDetails","Direct deposit","Routing/account information — synthetic only; do not enter real bank credentials","long"),
+ choose("ssdi.signatureStatus","Applicant signature","Physical applicant signature status",["not_requested","awaiting_ink_signature","signed_on_paper","needs_review"]),
+ conditional("ssdi.signDate","Applicant signature","Date applicant actually signed paper","ssdi.signatureStatus","signed_on_paper","date"),
+ yn("ssdi.signedMark","Witness","Did applicant sign by mark (X)?"),
+ conditional("ssdi.witnesses","Witnesses","Two witness signatures/addresses required if signed by X","ssdi.signedMark")
+ ]}
+]),
 form("SSA-8001-BK","Deferred/Abbreviated SSI Application","07-2023",12,"https://www.ssa.gov/forms/ssa-8001-bk.pdf",["ssi"],"application","Not the default full SSI application. Only use when SSA's abbreviated/deferred pathway applies.",[],true)
 ];
 export const FORM_BY_ID=Object.fromEntries(FORMS.map(f=>[f.id,f])) as Record<FormId,FormDef>;
