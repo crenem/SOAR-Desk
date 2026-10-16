@@ -87,10 +87,17 @@ fn validate_passphrase(passphrase: &str) -> Result<(), VaultCryptoError> {
     }
     Ok(())
 }
+fn opaque_uuid_case_id(id:&str)->bool {
+    let Some(suffix)=id.strip_prefix("CASE-") else{return false;};
+    let parts:Vec<&str>=suffix.split('-').collect();
+    if parts.len()!=5 {return false;}
+    parts.iter().zip([8,4,4,4,12]).all(|(part,expected)|
+        part.len()==expected && part.bytes().all(|c|c.is_ascii_hexdigit()))
+}
 fn validate_vault_id(vault_id: &str) -> Result<(), VaultCryptoError> {
     if !(vault_id.starts_with("SYN-") || vault_id.starts_with("CASE-"))
         || vault_id.len() <= 4
-        || (vault_id.starts_with("CASE-") && vault_id.len() < 16)
+        || (vault_id.starts_with("CASE-") && !opaque_uuid_case_id(vault_id))
         || vault_id.len() > 80
         || !vault_id
             .bytes()
@@ -531,7 +538,7 @@ mod tests {
         json["file_kind"]=serde_json::json!("soar-desk-local-case-snapshot");
         json["schema_version"]=serde_json::json!(2);
         json["synthetic_only"]=serde_json::json!(false);
-        json["case_reference"]=serde_json::json!("CASE-12345678-90ab-cdef");
+        json["case_reference"]=serde_json::json!("CASE-12345678-abcd-efab-1234-123456789abc");
         let payload=json.to_string().into_bytes();
         let sealed=seal_local_case(&payload,OP,ORG).unwrap();
         assert!(!encrypted_file_is_synthetic(&sealed).unwrap());
