@@ -116,6 +116,7 @@ fn source_document(path:&str)->Result<Vec<u8>,String>{
 pub struct AttachEvidenceRequest{
     source_path:String,
     case_reference:String,
+    #[serde(default)] expected_sha256:Option<String>,
     synthetic_confirmed:bool,
     #[serde(default)] local_risk_acknowledged:bool,
 }
@@ -136,6 +137,12 @@ pub fn attach_evidence_document(request:AttachEvidenceRequest)->Result<AttachedE
         return Err("The source is not being attached to the currently unlocked case.".into());
     }
     let input=Zeroizing::new(source_document(&request.source_path)?);
+    let digest=format!("{:x}",Sha256::digest(&*input));
+    if let Some(expected)=&request.expected_sha256 {
+        if expected!=&digest {
+            return Err("The original document changed since OCR/analysis. Re-ingest it before attaching.".into());
+        }
+    }
     let (id,cipher)=error_message(active.session.encrypt_document(&input))?;
     let path=blob_path(&active.path,&id)?;
     let folder=blob_folder(&active.path);
@@ -150,7 +157,7 @@ pub fn attach_evidence_document(request:AttachEvidenceRequest)->Result<AttachedE
         .unwrap_or("source-document").to_string();
     Ok(AttachedEvidence{
         blob_id:id,original_name:name,bytes:input.len() as u64,
-        sha256:format!("{:x}",Sha256::digest(&*input)),encrypted_path:dest
+        sha256:digest,encrypted_path:dest
     })
 }
 #[derive(Deserialize)]
@@ -610,7 +617,7 @@ mod tests {
             synthetic_confirmed:true,local_risk_acknowledged:false
         }).unwrap();
         let attached=attach_evidence_document(AttachEvidenceRequest {
-            source_path:src.clone(),case_reference:case_id.into(),
+            source_path:src.clone(),case_reference:case_id.into(),expected_sha256:None,
             synthetic_confirmed:true,local_risk_acknowledged:false
         }).unwrap();
         assert_eq!(attached.bytes,std::fs::metadata(&src).unwrap().len());
