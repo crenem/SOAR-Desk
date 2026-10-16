@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect,useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { extractMetadata, type MetadataCandidate, type MetadataCategory } from "./metadata";
@@ -75,6 +75,15 @@ export default function Documents({caseReference,syntheticOnly,onPrefill}:{caseR
   const [reviewer,setReviewer] = useState("");
   const [rationale,setRationale] = useState("");
   const generation = useRef(0);
+  useEffect(()=>{
+    // Do not leave old source-document plaintext or review state visible after
+    // changing to another case. Cancel outstanding inference sequences.
+    generation.current++;
+    setDocument(null);setSegments([]);setMetadata([]);setQwen([]);
+    setPath("");setDocumentCase("");setConfirmed(false);setProgress("");
+    setError("");setReview("PendingHumanReview");setReviewer("");setRationale("");
+    setBusy(false);
+  },[caseReference,syntheticOnly]);
 
   async function ingest(filePath:string) {
     const run = ++generation.current;
