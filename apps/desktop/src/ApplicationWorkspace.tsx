@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import {getCurrentWindow} from "@tauri-apps/api/window";
 import { FORMS, FORM_BY_ID, applicable, progress, type AnswerStatus, type Answers, type Column, type FormId, type Program, type Response, type Rows, type Section } from "./forms";
 import SubmissionTracker from "./SubmissionTracker";
 import type { SubmissionLog } from "./ssa-submissions";
@@ -108,6 +109,42 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
      setAutosaveState("Autosave FAILED — "+String(error));
    }finally{autosavePending.current=false;}
  }
+ // Closing the window must not silently abandon edits in the 10-second gap.
+ // Tauri close callbacks are synchronous for preventDefault; flush thereafter.
+ useEffect(()=>{
+   const win=getCurrentWindow();
+   let alive=true;
+   let closing=false;
+   const unlisten=win.onCloseRequested(async event=>{
+     if(closing)return;
+     const snapshot=JSON.stringify(snapshotRef.current);
+     const hasData=Object.keys(snapshotRef.current.answers).length>0
+       ||Object.values(snapshotRef.current.rows).some(v=>v.length>0)
+       ||snapshotRef.current.evidence.length>0;
+     const dirty=activeVault ? snapshot!==lastSaved.current : hasData;
+     if(!dirty)return;
+     event.preventDefault();
+     if(activeVault){
+       if(autosavePending.current){
+         setAutosaveState("Save in progress — wait for completion, then close.");
+         return;
+       }
+       await saveEncryptedNow();
+       if(!alive)return;
+       if(lastSaved.current!==JSON.stringify(snapshotRef.current)){
+         window.alert("Encrypted save did not complete. The case remains open; check autosave status.");
+         return;
+       }
+     }else if(!window.confirm("This case has UNSAVED interview information. Close and discard the unsaved information?")){
+       return;
+     }
+     closing=true;
+     try{await win.close();}catch(error){closing=false;setAutosaveState("Close failed: "+String(error));}
+   }).catch(error=>{setAutosaveState("Could not register close protection: "+String(error));return undefined;});
+   return ()=>{alive=false;void unlisten.then(fn=>fn?.());};
+ // Reattach if active-vault identity changes. Case data are read from refs.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[activeVault]);
  useEffect(()=>{
    if(!activeVault)return;
    const interval=window.setInterval(()=>{void saveEncryptedNow();},10_000);
