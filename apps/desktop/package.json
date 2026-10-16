@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test:forms": "node tests/forms.test.cjs",
-    "test:submissions": "node tests/ssa-submissions.test.cjs"
+    "test:submissions": "node tests/ssa-submissions.test.cjs",
+    "test:package": "node tests/application-package.test.cjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
