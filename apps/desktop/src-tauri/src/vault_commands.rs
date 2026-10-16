@@ -357,7 +357,7 @@ mod tests {
         let snapshot=serde_json::json!({
             "file_kind":"soar-desk-local-case-snapshot",
             "schema_version":2,"synthetic_only":false,
-            "case_reference":"CASE-12345678-abcd-efab-123456789abc",
+            "case_reference":"CASE-12345678-abcd-efab-1234-123456789abc",
             "programs":["ssi","ssdi"],"answers":{},"rows":{},"evidence":[],
             "signatures":[],
             "submissions":{"records":[],"events":[]}
