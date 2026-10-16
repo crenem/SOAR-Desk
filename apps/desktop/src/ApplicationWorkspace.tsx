@@ -6,6 +6,8 @@ import type { SubmissionLog } from "./ssa-submissions";
 import EvidenceRegister from "./EvidenceRegister";
 import PackageExport from "./PackageExport";
 import VaultLab from "./VaultLab";
+import SignatureWorkbench from "./SignatureWorkbench";
+import type {SignatureReceipt} from "./signature-policy";
 import type {PrefillSuggestion} from "./document-prefill";
 import {kindFor,inputMask,normalizeOnBlur,validateDisplay} from "./field-format";
 import {formCoverage,type FormCoverage,type MissingTarget} from "./form-navigation";
@@ -20,7 +22,7 @@ const statuses:{value:AnswerStatus;label:string}[]=[
 ];
 const display=(s:Response|undefined)=>s?.status==="unknown"?"Unknown":s?.value || "Not collected";
 const fieldsOf=(rows:Rows,key:string)=>rows[key]??[];
-type View="overview"|"interview"|"review"|"evidence"|"package"|"submissions"|"casefiles";
+type View="overview"|"interview"|"review"|"evidence"|"package"|"submissions"|"casefiles"|"signatures";
 type Props={onCaseChange?:(ref:string)=>void;prefill?:PrefillSuggestion[];onPrefillApplied?:()=>void;onProgress?:(items:FormCoverage[])=>void;navigate?:{target:MissingTarget;token:number}|null};
 
 
@@ -36,6 +38,7 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
  const [submissionLog,setSubmissionLog]=useState<SubmissionLog>({records:[],events:[]});
  const [evidence,setEvidence]=useState<EvidenceReference[]>([]);
  const [recoveryEvents,setRecoveryEvents]=useState<SyntheticRecoveryEvent[]>([]);
+ const [signatures,setSignatures]=useState<SignatureReceipt[]>([]);
  const [activeVault,setActiveVault]=useState<string|null>(null);
  const [autosaveState,setAutosaveState]=useState("Create or unlock an encrypted vault to enable autosave.");
  const [vaultMode,setVaultMode]=useState<"create"|"open">("open");
@@ -43,7 +46,7 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
  const autosavePending=useRef(false);
  const lastSaved=useRef("");
  const snapshotRef=useRef<PackageInput>({
-   caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog,recoveryEvents
+   caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog,recoveryEvents,signatures
  });
  const mappedCoverage=useMemo(()=>formCoverage(programs,includeDeferred,answers,rows),
    [programs,includeDeferred,answers,rows]);
@@ -67,8 +70,8 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
  },[navigate?.token,view,formId,section]);
  const currentSnapshot=useMemo<PackageInput>(()=>({
    caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,
-   submissions:submissionLog,recoveryEvents
- }),[caseLabel,programs,includeDeferred,answers,rows,evidence,submissionLog,recoveryEvents]);
+   submissions:submissionLog,recoveryEvents,signatures
+ }),[caseLabel,programs,includeDeferred,answers,rows,evidence,submissionLog,recoveryEvents,signatures]);
  snapshotRef.current=currentSnapshot;
  useEffect(()=>{onCaseChange?.(caseLabel);},[caseLabel,onCaseChange]);
  useEffect(()=>{setPrefillSelected(Object.fromEntries(prefill.map(p=>[p.key,!answers[p.key]?.value])));},
@@ -91,7 +94,8 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
          schema_version:1,synthetic_only:true,case_reference:snapshot.caseReference,
          programs:snapshot.programs,include_deferred:snapshot.includeDeferred,
          answers:snapshot.answers,rows:snapshot.rows,evidence:snapshot.evidence,
-         submissions:snapshot.submissions,recovery_events:snapshot.recoveryEvents??[]
+         submissions:snapshot.submissions,recovery_events:snapshot.recoveryEvents??[],
+         signatures:snapshot.signatures??[]
        },synthetic_confirmed:true
      }});
      lastSaved.current=signature;
@@ -147,6 +151,7 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
   if((captured>0||submissionLog.records.length>0||evidence.length>0)&&!window.confirm("Replace current synthetic case answers and CLEAR ALL IN-MEMORY evidence and submission records?"))return;
   setEvidence([]);
   setRecoveryEvents([]);
+  setSignatures([]);
   setActiveVault(null);
   lastSaved.current="";
   setAutosaveState("Synthetic demonstration loaded · create an encrypted vault to autosave.");
@@ -184,6 +189,7 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
   setRows({...saved.rows});
   setEvidence([...saved.evidence]);
   setRecoveryEvents([...(saved.recoveryEvents??[])]);
+  setSignatures([...(saved.signatures??[])]);
   setSubmissionLog({records:[...saved.submissions.records],events:[...saved.submissions.events]});
   setFormId("SSA-3368-BK");
   setSection("identity");
@@ -313,7 +319,7 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
      <button type="button" className="secondary" onClick={loadSyntheticExample}>Load synthetic Jane Doe example</button>
    </div>
    <div className="intake-tabs" role="group" aria-label="Application views">
-    {(["overview","interview","review","evidence","package","submissions","casefiles"] as View[]).map(v=><button type="button" key={v} className={view===v?"active":""} onClick={()=>setView(v)}>{v==="overview"?"Form inventory":v==="interview"?"Guided interview":v==="review"?"Review gaps":v==="evidence"?"Evidence register":v==="package"?"SSA exports":v==="casefiles"?"Case files":"Submissions & receipts"}</button>)}
+    {(["overview","interview","review","evidence","signatures","package","submissions","casefiles"] as View[]).map(v=><button type="button" key={v} className={view===v?"active":""} onClick={()=>setView(v)}>{v==="overview"?"Form inventory":v==="interview"?"Guided interview":v==="review"?"Review gaps":v==="evidence"?"Evidence register":v==="signatures"?"Acknowledgments":v==="package"?"SSA exports":v==="casefiles"?"Case files":"Submissions & receipts"}</button>)}
    </div>
    {view==="overview"&&<section className="panel">
     <h2>Selected application forms</h2>
@@ -360,7 +366,8 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
     <p><strong>Applicant:</strong> {display(answers["person.name"])} · <strong>Onset:</strong> {display(answers["work.onset"])} · <strong>Reported living arrangement:</strong> {display(answers["living.type"])}</p>
    </section>}
    {view==="evidence"&&<EvidenceRegister evidence={evidence} setEvidence={setEvidence}/>}
-   {view==="package"&&<PackageExport input={{caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog,recoveryEvents}}/>}\n   {view==="casefiles"&&<VaultLab input={currentSnapshot} onRestore={restoreSyntheticCase} onVaultReady={vaultReady} initialMode={vaultMode}/>}
+   {view==="signatures"&&<SignatureWorkbench formId={formId} caseReference={caseLabel} answers={answers} rows={rows} receipts={signatures} onChange={setSignatures}/>}
+   {view==="package"&&<PackageExport input={{caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog,recoveryEvents,signatures}}/>}\n   {view==="casefiles"&&<VaultLab input={currentSnapshot} onRestore={restoreSyntheticCase} onVaultReady={vaultReady} initialMode={vaultMode}/>}
    <div hidden={view!=="submissions"}><SubmissionTracker log={submissionLog} setLog={setSubmissionLog} caseReference={caseLabel} programs={programs}/></div>
    <p className="hint">Synthetic-only encrypted autosave requires a writable unlocked case vault. No transmission, official signature, or SSA eligibility decision. Verify form editions and complete all source questions before using any generated paperwork.</p>
   </div>;
