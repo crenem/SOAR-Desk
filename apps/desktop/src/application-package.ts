@@ -15,6 +15,9 @@ export type EvidenceReference={
   status:EvidenceStatus;
   reviewer:string;
 };
+export type SyntheticRecoveryEvent={
+  event:string;actor:string;reason:string;old_vault_retirement:string;
+};
 export type PackageInput={
   caseReference:string;
   programs:Program[];
@@ -23,6 +26,7 @@ export type PackageInput={
   rows:Rows;
   evidence:EvidenceReference[];
   submissions:SubmissionLog;
+  recoveryEvents?:SyntheticRecoveryEvent[];
 };
 export type QuestionSnapshot={
   key:string;ref:string;label:string;
