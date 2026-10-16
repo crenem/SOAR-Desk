@@ -36,9 +36,11 @@ npm run tauri dev
 
 The document intake pipeline uses Laya to classify each passage, then Qwen to propose structured clinical findings with exact input quotations. Unsupported quotations are discarded; proposals remain human-review-only. If the Qwen server is not running, Laya and OCR continue operating, and Qwen errors are visible.
 
-## GenieX server reachable but produces zero tokens
+## GenieX GGUF zero-token issue: fixed request parameter
 
 The normal launcher checks the Windows GenieX OpenAI-compatible service on `http://127.0.0.1:18181/v1`, selects the installed GGUF Qwen3 4B model, and makes a real synthetic test request for JSON. A listed model or HTTP 200 response alone does **not** establish model readiness.
+
+**Confirmed on Windows (2026-10-16):** For the installed `unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_0` model, a minimal OpenAI-compatible chat request produced 11 completion tokens and usable text, while an otherwise identical request with `enable_think=false` produced **0 tokens** and no text. Direct `geniex infer ... --compute cpu` also generated successfully. This isolates a GGUF/GenieX HTTP request-parameter incompatibility, rather than an offline server or broken model. The SOAR Desk GenieX probe and evidence worker now **omit** the `enable_think` key entirely. Their GenieX prompts use one user message, matching the verified successful HTTP request shape. The extraction path still validates parseable JSON and source quotations, and CPU fallback remains when generation is actually unusable.
 
 If the startup log says `finish_reason=stop, completion_tokens=0`, then the request reached GenieX but the model returned **no assistant content**. This is not a network failure, and raising `max_tokens` alone is not a demonstrated solution. The probe now makes one second attempt before declining the GenieX backend, and the document worker also retries a transient empty/invalid GenieX reply before falling back to the local CPU model.
 
@@ -49,13 +51,13 @@ cd ~/Projects/SOAR-Desk
 python3 scripts/probe-geniex.py
 ```
 
-If the response remains empty after both requests, **first distinguish Windows HTTP from WSL2 and the underlying GGUF runtime**. Open Windows PowerShell in the repository's Windows-accessible path and run:
+If a newly updated probe still fails, distinguish Windows HTTP from WSL2 and the underlying GGUF runtime. Open Windows PowerShell in the repository's Windows-accessible path and run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\diagnose-geniex.ps1
 ```
 
-This script sends only a fictional HELLO prompt, identifies the process listening on port 18181, lists model IDs, and compares a minimal chat-completion request with one using `enable_think=false`. It does not terminate or reconfigure anything, and does not write files. If both return `finish_reason=stop` and `completion_tokens=0` from Windows as well, WSL2 is **not** the cause.
+This script sends only a fictional HELLO prompt, identifies the process listening on port 18181, lists model IDs, and compares a minimal chat-completion request with one using `enable_think=false`. It does not terminate or reconfigure anything, and does not write files. The diagnostic also detects the confirmed compatibility pattern: generation succeeds without `enable_think` but fails when it is explicitly false.
 
 For the exact GGUF model listed in the diagnostic, run it **directly**, bypassing the server:
 
@@ -73,16 +75,15 @@ $body = @{
     messages = @(@{role="user";content="Say hello in one sentence."})
     max_tokens = 128
     temperature = 0.7
-    enable_think = $false
     stream = $false
 } | ConvertTo-Json -Depth 5
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:18181/v1/chat/completions" -Body $body -ContentType "application/json" |
     ConvertTo-Json -Depth 7
 ```
 
-Use the exact model ID listed by `GET /v1/models` if it differs from the example above. The `choices[0].message.content` must be nonempty and `usage.completion_tokens` should normally be greater than zero. If the independent PowerShell test is empty too, SOAR Desk cannot fix the model engine from WSL2; check GenieX version/runtime/model configuration and its server logs.
+Use the exact model ID listed by `GET /v1/models` if it differs from the example above. The `choices[0].message.content` must be nonempty and `usage.completion_tokens` should normally be greater than zero. If the minimal independent PowerShell request is empty, investigate GenieX version/runtime/model configuration and server logs. Do not put `enable_think = $false` back into the SOAR Desk GGUF request: it is known to produce zero completion tokens on this installation.
 
-The launcher reports **GenieX GGUF inference selected** when the actual JSON generation probe succeeds. It does *not* claim NPU acceleration from model naming alone: the GGUF backend's device offload must be verified in GenieX itself. On a failed probe, the launcher selects Linux CPU for that run; relaunch after fixing/restarting GenieX to retest.
+The launcher reports **GenieX GGUF inference selected** when the actual JSON generation probe succeeds after this fix. It does *not* claim NPU acceleration from model naming alone: the GGUF backend's device offload must be verified in GenieX itself. On a failed probe, the launcher selects Linux CPU for that run; relaunch after fixing/restarting GenieX to retest.
 
 **Resource note:** The Snapdragon X device may have memory contention if both a GenieX model and Linux CPU llama-server are loaded. The launcher skips CPU startup when GenieX inference is healthy. With a failed probe, CPU fallback can use significant memory. The local integration still remains synthetic-only; no real patient information or external model requests are permitted.
 
