@@ -69,7 +69,7 @@ export type DraftPackage={
 };
 const DISCLAIMER="TRAINING DATA ONLY. Partial form mapping; not an SSA application, signature, claim receipt or authorization. No documents attached. All acknowledgments are staff-entered and unverified by SOAR Desk.";
 const validId=/^SYN-[A-Za-z0-9][A-Za-z0-9_-]{0,76}$/;
-const localId=/^CASE-[A-Za-z0-9_-]{11,75}$/;
+const localId=/^CASE-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const evidenceId=/^SYN-EV-[A-Za-z0-9][A-Za-z0-9_-]{0,60}$/;
 const localEvidenceId=/^EV-[A-Za-z0-9][A-Za-z0-9_-]{0,60}$/;
 export function checkEvidence(evidence:EvidenceReference[],syntheticOnly=true):void{
