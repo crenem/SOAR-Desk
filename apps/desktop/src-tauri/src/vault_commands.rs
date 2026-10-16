@@ -314,6 +314,14 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    // Native vault commands share one per-process active session. Serialize
+    // these two integration tests instead of racing to replace that session.
+    static VAULT_INTEGRATION_LOCK: std::sync::OnceLock<std::sync::Mutex<()>> =
+        std::sync::OnceLock::new();
+    fn vault_test_guard() -> std::sync::MutexGuard<'static,()> {
+        VAULT_INTEGRATION_LOCK.get_or_init(||std::sync::Mutex::new(())).lock().unwrap()
+    }
+
 
     fn target(ext: &str) -> String {
         // Only synthetic ciphertext is ever written; unique temp filenames for CI.
@@ -342,6 +350,7 @@ mod tests {
 
     #[test]
     fn restricted_local_case_requires_explicit_risk_ack_and_roundtrips_encrypted() {
+        let _test_guard=vault_test_guard();
         const OP:&str="local-operator-password-2026";
         const ORG:&str="local-nonprofit-recovery-2026";
         let path=target("soarvault");
@@ -383,6 +392,7 @@ mod tests {
 
     #[test]
     fn end_to_end_create_open_backup_and_organizational_recovery() {
+        let _test_guard=vault_test_guard();
         const OP:&str="synthetic-operator-password-2026";
         const ORG:&str="synthetic-nonprofit-recovery-2026";
         const NEW_OP:&str="replacement-practitioner-password-2026";
