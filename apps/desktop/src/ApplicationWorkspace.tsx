@@ -2,6 +2,9 @@ import { useMemo, useState } from "react";
 import { FORMS, FORM_BY_ID, applicable, progress, type AnswerStatus, type Answers, type Column, type FormId, type Program, type Response, type Rows, type Section } from "./forms";
 import SubmissionTracker from "./SubmissionTracker";
 import type { SubmissionLog } from "./ssa-submissions";
+import EvidenceRegister from "./EvidenceRegister";
+import PackageExport from "./PackageExport";
+import type {EvidenceReference} from "./application-package";
 
 const emptyAnswer=():Response=>({value:"",status:"reported",source:""});
 const statuses:{value:AnswerStatus;label:string}[]=[
@@ -12,7 +15,7 @@ const statuses:{value:AnswerStatus;label:string}[]=[
 ];
 const display=(s:Response|undefined)=>s?.status==="unknown"?"Unknown":s?.value || "Not collected";
 const fieldsOf=(rows:Rows,key:string)=>rows[key]??[];
-type View="overview"|"interview"|"review"|"submissions";
+type View="overview"|"interview"|"review"|"evidence"|"package"|"submissions";
 
 export default function ApplicationWorkspace(){
  const [programs,setPrograms]=useState<Program[]>(["ssi","ssdi"]);
@@ -24,6 +27,7 @@ export default function ApplicationWorkspace(){
  const [includeDeferred,setIncludeDeferred]=useState(false);
  const [caseLabel,setCaseLabel]=useState("SYN-APPLICATION-001");
  const [submissionLog,setSubmissionLog]=useState<SubmissionLog>({records:[],events:[]});
+ const [evidence,setEvidence]=useState<EvidenceReference[]>([]);
  const activeForms=useMemo(()=>FORMS.filter(f=>f.programs.some(p=>programs.includes(p))&&(f.id!=="SSA-8001-BK"||includeDeferred)),[programs,includeDeferred]);
  const current=FORM_BY_ID[formId];
  const validCurrent=activeForms.some(f=>f.id===formId)?current:activeForms[0];
@@ -33,7 +37,8 @@ export default function ApplicationWorkspace(){
  const possible=total.reduce((n,x)=>n+x.p.total,0);
  const sections=validCurrent?.sections??[];
  function loadSyntheticExample(){
-  if((captured>0||submissionLog.records.length>0)&&!window.confirm("Replace current synthetic case answers and CLEAR ALL IN-MEMORY submission records?"))return;
+  if((captured>0||submissionLog.records.length>0||evidence.length>0)&&!window.confirm("Replace current synthetic case answers and CLEAR ALL IN-MEMORY evidence and submission records?"))return;
+  setEvidence([]);
   setSubmissionLog({records:[],events:[]});
   const facts:Record<string,string>={
     "person.name":"Jane Doe", "person.phone":"No reliable telephone; use alternate contact with permission",
@@ -101,7 +106,7 @@ export default function ApplicationWorkspace(){
      </select></label>
      <label>Source reference (if available)<input value={r.source} onChange={e=>change(question.key,{source:e.target.value})} placeholder="Interview, document or evidence reference"/></label>
     </div>
-    <p className="hint">Verification is a human assertion, not an automated model judgment.</p>
+    <p className="hint">Verification is a human assertion, not an automated model judgment. To link an indexed source, use an exact SYN-EV-... reference from the Evidence register.</p>
    </details>
   </div>;
  }
@@ -148,7 +153,7 @@ export default function ApplicationWorkspace(){
      <button type="button" className="secondary" onClick={loadSyntheticExample}>Load synthetic Jane Doe example</button>
    </div>
    <div className="intake-tabs" role="group" aria-label="Application views">
-    {(["overview","interview","review","submissions"] as View[]).map(v=><button type="button" key={v} className={view===v?"active":""} onClick={()=>setView(v)}>{v==="overview"?"Form inventory":v==="interview"?"Guided interview":v==="review"?"Review gaps":"Submissions & receipts"}</button>)}
+    {(["overview","interview","review","evidence","package","submissions"] as View[]).map(v=><button type="button" key={v} className={view===v?"active":""} onClick={()=>setView(v)}>{v==="overview"?"Form inventory":v==="interview"?"Guided interview":v==="review"?"Review gaps":v==="evidence"?"Evidence register":v==="package"?"Draft package":"Submissions & receipts"}</button>)}
    </div>
    {view==="overview"&&<section className="panel">
     <h2>Selected application forms</h2>
@@ -194,6 +199,8 @@ export default function ApplicationWorkspace(){
     <p><strong>Current synthetic case:</strong> {caseLabel}</p>
     <p><strong>Applicant:</strong> {display(answers["person.name"])} · <strong>Onset:</strong> {display(answers["work.onset"])} · <strong>Reported living arrangement:</strong> {display(answers["living.type"])}</p>
    </section>}
+   {view==="evidence"&&<EvidenceRegister evidence={evidence} setEvidence={setEvidence}/>}
+   {view==="package"&&<PackageExport input={{caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog}}/>}
    <div hidden={view!=="submissions"}><SubmissionTracker log={submissionLog} setLog={setSubmissionLog} caseReference={caseLabel} programs={programs}/></div>
    <p className="hint">In-memory only · No autosave, transmission, official signature, or SSA eligibility decision. Verify form editions and complete all source questions before using any generated paperwork.</p>
   </div>;
