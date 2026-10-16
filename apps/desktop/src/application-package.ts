@@ -49,9 +49,9 @@ export type FormSnapshot={
     questions:QuestionSnapshot[];collections:CollectionSnapshot[]}[];
 };
 export type DraftPackage={
-  file_kind:"soar-desk-synthetic-application-draft";
+  file_kind:"soar-desk-synthetic-application-draft"|"soar-desk-local-application-draft";
   schema_version:1;
-  synthetic_only:true;
+  synthetic_only:boolean;
   disclaimer:string;
   case_reference:string;
   programs:Program[];
@@ -69,11 +69,13 @@ export type DraftPackage={
 };
 const DISCLAIMER="TRAINING DATA ONLY. Partial form mapping; not an SSA application, signature, claim receipt or authorization. No documents attached. All acknowledgments are staff-entered and unverified by SOAR Desk.";
 const validId=/^SYN-[A-Za-z0-9][A-Za-z0-9_-]{0,76}$/;
+const localId=/^CASE-[A-Za-z0-9_-]{11,75}$/;
 const evidenceId=/^SYN-EV-[A-Za-z0-9][A-Za-z0-9_-]{0,60}$/;
-export function checkEvidence(evidence:EvidenceReference[]):void{
+const localEvidenceId=/^EV-[A-Za-z0-9][A-Za-z0-9_-]{0,60}$/;
+export function checkEvidence(evidence:EvidenceReference[],syntheticOnly=true):void{
   const ids=new Set<string>();
   for(const item of evidence){
-    if(!evidenceId.test(item.id))throw Error("Evidence ID must begin SYN-EV- and contain letters, numbers, underscores or hyphens.");
+    if(!(syntheticOnly?evidenceId:localEvidenceId).test(item.id))throw Error("Evidence ID has the wrong case mode prefix or invalid characters.");
     if(ids.has(item.id))throw Error("Duplicate evidence ID: "+item.id);
     ids.add(item.id);
     if(!item.title.trim())throw Error("Evidence "+item.id+" needs a descriptive title.");
@@ -84,10 +86,11 @@ export function checkEvidence(evidence:EvidenceReference[]):void{
   }
 }
 export function buildDraftPackage(input:PackageInput,now:string=new Date().toISOString()):DraftPackage{
-  if(!validId.test(input.caseReference))throw Error("Use an explicitly fictional case reference starting SYN-.");
+  const training=input.syntheticOnly!==false;
+  if(!(training?validId:localId).test(input.caseReference))throw Error("Use a training SYN- ID or an opaque CASE- identifier for a restricted local case.");
   if(input.programs.length===0)throw Error("Choose at least one intended benefits program.");
   if(!/^\d{4}-\d{2}-\d{2}T/.test(now)||!Number.isFinite(Date.parse(now)))throw Error("Invalid generation timestamp.");
-  checkEvidence(input.evidence);
+  checkEvidence(input.evidence,training);
   const selected=FORMS.filter(form=>form.programs.some(p=>input.programs.includes(p))
     &&(form.id!=="SSA-8001-BK"||input.includeDeferred));
   const refs=new Map(input.evidence.map(e=>[e.id,e]));
@@ -102,7 +105,7 @@ export function buildDraftPackage(input:PackageInput,now:string=new Date().toISO
       return id;
     }
     // Descriptive interview/provenance text is supported, not evidence-ID based.
-    if(id.startsWith("SYN-EV-"))sourceWarnings.add("Unmatched evidence reference: "+id);
+    if(id.startsWith("SYN-EV-")||id.startsWith("EV-"))sourceWarnings.add("Unmatched evidence reference: "+id);
     return null;
   };
   let questions=0,captured=0,verified=0;
@@ -146,10 +149,10 @@ export function buildDraftPackage(input:PackageInput,now:string=new Date().toISO
     events:input.submissions.events.filter(e=>e.caseReference===input.caseReference)
   };
   return {
-    file_kind:"soar-desk-synthetic-application-draft",
-    schema_version:1,
-    synthetic_only:true,
-    disclaimer:DISCLAIMER,
+    file_kind:training?"soar-desk-synthetic-application-draft":"soar-desk-local-application-draft",
+    schema_version:training?1:2,
+    synthetic_only:training,
+    disclaimer:training?DISCLAIMER:"UNSIGNED WORKING DRAFT ONLY. Only selected fields from the official source were mapped. Applicant must review and finish all questions, sign using an accepted SSA method, and submit separately. Contains unencrypted PII if exported as PDF.",
     case_reference:input.caseReference,programs:[...input.programs],generated_at:now,
     forms,evidence_register:input.evidence.map(e=>({...e})),
     source_reference_warnings:[...sourceWarnings].sort(),submission_log:caseSubmissions,
