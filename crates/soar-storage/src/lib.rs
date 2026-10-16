@@ -3,6 +3,8 @@
 //! MUST NOT be written until the audited encrypted backend is implemented.
 use serde::{Deserialize, Serialize};
 
+pub mod recovery;
+
 pub const SCHEMA_VERSION: u32 = 1;
 pub const INITIAL_SCHEMA: &str = include_str!("../migrations/0001_initial.sql");
 
