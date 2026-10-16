@@ -32,7 +32,8 @@ function asCase(value:unknown):PackageInput{
    answers:v.answers as PackageInput["answers"],
    rows:v.rows as PackageInput["rows"],
    evidence:v.evidence as PackageInput["evidence"],
-   submissions:v.submissions as PackageInput["submissions"]
+   submissions:v.submissions as PackageInput["submissions"],
+   recoveryEvents:Array.isArray(v.recovery_events)?v.recovery_events as PackageInput["recoveryEvents"]:[]
  };
 }
 export default function VaultLab({input,onRestore}:Props){
@@ -70,7 +71,8 @@ export default function VaultLab({input,onRestore}:Props){
      answers:input.answers,
      rows:input.rows,
      evidence:input.evidence,
-     submissions:input.submissions
+     submissions:input.submissions,
+     recovery_events:input.recoveryEvents??[]
    };
  }
  async function execute(){
