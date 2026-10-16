@@ -47,7 +47,7 @@ export default function EvidenceRegister({evidence,setEvidence,syntheticOnly=tru
    const indices=evidence.map(e=>Number(e.id.match(new RegExp("^"+prefix+"(\\d+)$"))?.[1]||0));
    const next=Math.max(0,...indices)+1;
    setEvidence(list=>[...list,{id:prefix+String(next).padStart(4,"0"),title:"",
-     kind:"medical",location:"",note:"",status:"pending",reviewer:""}]);
+     kind:"other",location:"",note:"",status:"pending",reviewer:""}]);
  }
  function change(id:string,patch:Partial<EvidenceReference>){
    setEvidence(list=>list.map(e=>e.id===id?{...e,...patch}:e));
