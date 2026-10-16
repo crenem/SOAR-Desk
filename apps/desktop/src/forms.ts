@@ -46,11 +46,26 @@ const income=collection("income","Income: received and anticipated","SSA-8000 Pa
  "The full SSA-8000 asks about income since the first moment of the filing month and expected in the next 14 months.");
 const form=(id:FormId,title:string,edition:string,pages:number,url:string,programs:Program[],phase:FormDef["phase"],note:string,sections:Section[],referenceOnly=false):FormDef=>({id,title,edition,pages,url,programs,phase,note,sections,referenceOnly});
 export const FORMS:FormDef[]=[
-form("SSA-3368-BK","Disability Report — Adult","06-2024",15,"https://www.ssa.gov/forms/ssa-3368-bk.pdf",["ssdi","ssi"],"disability","First-pass capture for Sections 1–11; not yet a complete field-by-field transcription.",[
+form("SSA-3368-BK","Disability Report — Adult","06-2024",15,"https://www.ssa.gov/forms/ssa-3368-bk.pdf",["ssdi","ssi"],"disability","First-pass capture for Sections 1–11; §4 now preserves distinct never-worked/stopped/current-work branches. PDF binding still requires field audit. Not every source question is mapped.",[
  {id:"identity",title:"§1 · About the applicant",pages:"3",questions:[...applicant,q("person.email","1.E","Email"),yn("person.othernames","1.C","Other names on medical or educational records?"),conditional("person.othernamesText","1.C","Other names","person.othernames"),yn("person.englishSpeak","1.G","Can speak and understand English?"),yn("person.englishRead","1.H","Can read and understand English?"),yn("person.englishWrite","1.I","Can write more than a name in English?")]},
  {id:"contacts",title:"§2 · Alternate contacts",pages:"3–4",questions:[yn("contacts.available","§2","Are there contacts who can help SSA reach the applicant?")],collections:[collection("contacts","People familiar with applicant","§2",[{key:"name",label:"Name"},{key:"relationship",label:"Relationship"},{key:"phone",label:"Phone"},{key:"address",label:"Address"}],"Do not assume permission to contact them.",{key:"contacts.available",equals:"yes"})]},
  {id:"impairments",title:"§3 · Medical conditions",pages:"4",questions:[q("medical.height","3.B","Height"),q("medical.weight","3.C","Weight")],collections:[diagnoses]},
- {id:"activity",title:"§4, §6 · Work activity and history",pages:"4–9",questions:[choose("work.current","4.A","Current work situation",["never","stopped","working"]),q("work.onset","4.B–F","Date conditions became severe enough to keep from working","date"),conditional("work.stop","4.C","Date last worked","work.current","stopped","date"),yn("work.changed","4.D/4.F","Did conditions require changes to work activity?"),yn("work.any","6.A","Any qualifying work in the five years before unable to work?"),q("work.explain","6.B–D","Additional job demands and effect of conditions","long")],collections:[jobs]},
+ {id:"activity",title:"§4, §6 · Work activity and history",pages:"4–9",questions:[
+ choose("work.current","4.A","Current work situation",["never","stopped","working"]),
+ conditional("ssa3368.neverOnset","4.B","If never worked: date conditions became severe enough to prevent work","work.current","never","date"),
+ conditional("work.stop","4.C","If stopped: last day of work","work.current","stopped","date"),
+ conditional("ssa3368.stopReason","4.C","If stopped: why did work stop?","work.current","stopped"),
+ conditional("ssa3368.afterStopOnset","4.C","If stopped: when did conditions become severe enough to prevent work?","work.current","stopped","date"),
+ conditional("ssa3368.stoppedChanges","4.D","If stopped: did conditions require changes to work activity?","work.current","stopped","yesno"),
+ conditional("ssa3368.stoppedChangedDate","4.D","If work changed: when?","ssa3368.stoppedChanges","yes","date"),
+ conditional("ssa3368.stoppedEarnings","4.E","If work changed: earnings above the amount specified on this edition of the SSA form?","ssa3368.stoppedChanges","yes","yesno"),
+ conditional("ssa3368.currentChanges","4.F","If currently working: did conditions require changes to work?","work.current","working","yesno"),
+ conditional("ssa3368.currentChangedDate","4.F","If currently working and changed: when did changes start?","ssa3368.currentChanges","yes","date"),
+ conditional("ssa3368.currentFirstSymptoms","4.F","If currently working without changes: when did conditions first start bothering you?","ssa3368.currentChanges","no","date"),
+ conditional("ssa3368.currentEarnings","4.G","If currently working: earnings above the form's specified threshold?","work.current","working","yesno"),
+ yn("work.any","6.A","Any qualifying job in the five years before unable to work?"),
+ q("work.explain","6.B–D","Additional job demands and effect of conditions","long")
+ ],collections:[jobs]},
  {id:"education",title:"§5 · Education and training",pages:"5–6",questions:[q("education.level","5.A","Highest grade or schooling"),q("education.last","5.A","Date completed","month"),yn("education.special","5.B","Special education?"),conditional("education.specialDetail","5.B","Special education details","education.special"),yn("education.training","5.C","Job/trade training?"),conditional("education.trainingDetail","5.C","Training details","education.training"),q("education.language","5.D","Everyday written language"),yn("education.read","5.E","Can read a simple message?"),yn("education.write","5.F","Can write a simple message?")]},
  {id:"meds",title:"§7 · Medicines",pages:"9",questions:[yn("medical.medicines","§7","Taking medicines now?")],collections:[meds]},
  {id:"treatment",title:"§8 · Treatment sources",pages:"10–12",questions:[yn("medical.treated","8.A","Seen a provider or have an appointment scheduled?")],collections:[providers]},
