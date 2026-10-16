@@ -50,6 +50,7 @@ CREATE TABLE evidence_sources (
  evidence_id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES cases(case_id),
  source_kind TEXT NOT NULL, source_location TEXT,
  review_state TEXT NOT NULL CHECK(review_state IN ('pending','human_verified','rejected')),
+ sensitivity TEXT NOT NULL DEFAULT 'restricted' CHECK(sensitivity IN ('restricted','sud_part2','psychotherapy_notes','other_special')),
  reviewed_by TEXT REFERENCES principals(principal_id), reviewed_at TEXT, created_at TEXT NOT NULL
 );
 CREATE TABLE field_answers (
@@ -68,6 +69,7 @@ CREATE TABLE blob_metadata (
  source_filename TEXT NOT NULL, mime_type TEXT NOT NULL,
  plaintext_sha256 TEXT NOT NULL, content_length INTEGER NOT NULL CHECK(content_length>=0),
  encryption_algorithm TEXT NOT NULL, encryption_key_id TEXT NOT NULL,
+ sensitivity TEXT NOT NULL DEFAULT 'restricted' CHECK(sensitivity IN ('restricted','sud_part2','psychotherapy_notes','other_special')),
  added_at TEXT NOT NULL, added_by TEXT NOT NULL REFERENCES principals(principal_id)
 );
 CREATE TABLE evidence_documents (
@@ -81,6 +83,34 @@ CREATE TABLE submitted_packets (
  staff_reported_submission_at TEXT, independently_checked_receipt_at TEXT,
  externally_issued_reference TEXT, reported_by TEXT REFERENCES principals(principal_id),
  verified_by TEXT REFERENCES principals(principal_id)
+);
+-- Permissions and consent evidence are distinct from a signed SSA-827.
+-- Expired/revoked consent is never silently treated as active by the host.
+CREATE TABLE authorizations (
+ authorization_id TEXT PRIMARY KEY,
+ case_id TEXT NOT NULL REFERENCES cases(case_id),
+ authorization_kind TEXT NOT NULL,
+ signer_role TEXT NOT NULL,
+ source_blob_id TEXT REFERENCES blob_metadata(blob_id),
+ scope_json TEXT NOT NULL,
+ valid_from TEXT,
+ valid_until TEXT,
+ revoked_at TEXT,
+ review_state TEXT NOT NULL CHECK(review_state IN ('pending','human_verified','rejected')),
+ reviewed_by TEXT REFERENCES principals(principal_id),
+ created_at TEXT NOT NULL
+);
+CREATE TABLE disclosure_events (
+ disclosure_id TEXT PRIMARY KEY,
+ case_id TEXT NOT NULL REFERENCES cases(case_id),
+ authorization_id TEXT REFERENCES authorizations(authorization_id),
+ recipient TEXT NOT NULL,
+ disclosure_purpose TEXT NOT NULL,
+ document_manifest_hash TEXT NOT NULL,
+ approved_by TEXT NOT NULL REFERENCES principals(principal_id),
+ approved_at TEXT NOT NULL,
+ delivery_method TEXT,
+ externally_verified_receipt TEXT
 );
 CREATE TABLE audit_events (
  sequence_id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT NOT NULL UNIQUE,
