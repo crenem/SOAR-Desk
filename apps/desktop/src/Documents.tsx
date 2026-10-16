@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { extractMetadata, type MetadataCandidate, type MetadataCategory } from "./metadata";
+import { reviewedSuggestions,type PrefillSuggestion } from "./document-prefill";
 
 type Page = { page: number; text: string; method: string; warning: string | null };
 type Document = { document_id: string; sha256: string; pages: Page[] };
@@ -59,7 +60,7 @@ function summarise(parts: Segment[]) {
     functional:scored.length ? "Functional-evidence signals available for review; verify each against source passages." : "No reliable functional-evidence classification available.",
     status: parts.length && complete.length === parts.length && ordered.length > 0 ? "Ready for human review" : "Incomplete — review required"};
 }
-export default function Documents() {
+export default function Documents({caseReference,onPrefill}:{caseReference:string;onPrefill:(items:PrefillSuggestion[],caseReference:string)=>void}) {
   const [confirmed,setConfirmed] = useState(false);
   const [path,setPath] = useState("");
   const [document,setDocument] = useState<Document | null>(null);
@@ -133,6 +134,7 @@ export default function Documents() {
   const qwenFailures=qwen.filter(s=>s.error).length;
   const metadataGroups: MetadataCategory[] = ["Document","Patient","Encounter","Diagnoses","Medical history","Psychiatric history","Medications","Allergies","Functional evidence"];
   const verifiedMetadata = metadata.filter(m=>m.status==="HumanVerified").length;
+  const fillCandidates = document ? reviewedSuggestions(metadata,document.sha256,caseReference) : [];
   function updateMetadata(id:string, patch:Partial<MetadataCandidate>){setMetadata(items=>items.map(m=>m.id===id?{...m,...patch,status:patch.value!==undefined?"PendingHumanReview":(patch.status??m.status)}:m)); setReview("PendingHumanReview");}
   const readyToReview=!busy && !!document && segments.length>0 && review!=="PendingHumanReview" && !!reviewer.trim() && !!rationale.trim();
   return <section className="panel" aria-label="Document intake and evidence assessment">
@@ -193,6 +195,13 @@ export default function Documents() {
             </fieldset>)}
           </details> : null;
         })}
+        <div className="review">
+          <h3>Prefill application fields</h3>
+          <p className="muted">After verifying individual labeled values against the original document, send them to the application as suggestions. This does not automatically overwrite the interview or treat model output as fact. Conflicting values within the same document are excluded.</p>
+          <p><strong>{fillCandidates.length}</strong> verified, eligible applicant fields</p>
+          <button type="button" className="primary" disabled={busy||fillCandidates.length===0}
+             onClick={()=>onPrefill(fillCandidates,caseReference)}>Review {fillCandidates.length} suggestions in Application Preparation →</button>
+        </div>
         <p className="muted">Clinical fields are candidate text excerpts, not normalized diagnoses or verified ICD-10 codes. Values and review selections are in memory only.</p>
       </section>
       <section className="review">
