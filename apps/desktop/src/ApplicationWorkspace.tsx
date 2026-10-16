@@ -196,7 +196,7 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
   setActiveVault(null);lastSaved.current="";
   void invoke("lock_synthetic_autosave").catch(()=>{});
   setAutosaveState("Restricted local case created in memory. Create an encrypted vault BEFORE entering records.");
-  setFormId("SSA-3368-BK");setSection("identity");setView("interview");
+  setFormId("SSA-3368-BK");setSection("identity");setVaultMode("create");setView("casefiles");
  }
  function loadSyntheticExample(){
   if((captured>0||submissionLog.records.length>0||evidence.length>0)&&!window.confirm("Replace current synthetic case answers and CLEAR ALL IN-MEMORY evidence and submission records?"))return;
