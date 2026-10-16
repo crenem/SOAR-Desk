@@ -20,3 +20,5 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests
         run: cargo test --workspace
+      - name: In-memory case schema tests (no real data)
+        run: python3 -m unittest discover -s tests -p test_case_schema.py -v
