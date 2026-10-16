@@ -4,7 +4,7 @@ import SubmissionTracker from "./SubmissionTracker";
 import type { SubmissionLog } from "./ssa-submissions";
 import EvidenceRegister from "./EvidenceRegister";
 import PackageExport from "./PackageExport";
-import type {EvidenceReference} from "./application-package";
+import type {EvidenceReference,PackageInput} from "./application-package";
 
 const emptyAnswer=():Response=>({value:"",status:"reported",source:""});
 const statuses:{value:AnswerStatus;label:string}[]=[
@@ -62,6 +62,19 @@ export default function ApplicationWorkspace(){
     medicines:[{medicine:"Fictional medication — confirm with record",reason:"Pain management",_status:"reported"}]
   });
   setFormId("SSA-3368-BK");setSection("identity");setView("interview");setCaseLabel("SYN-JANE-DOE-001");
+ }
+ function restoreSyntheticCase(saved:PackageInput){
+  // The vault import interface explicitly asks for confirmation before calling.
+  setCaseLabel(saved.caseReference);
+  setPrograms([...saved.programs]);
+  setIncludeDeferred(saved.includeDeferred);
+  setAnswers({...saved.answers});
+  setRows({...saved.rows});
+  setEvidence([...saved.evidence]);
+  setSubmissionLog({records:[...saved.submissions.records],events:[...saved.submissions.events]});
+  setFormId("SSA-3368-BK");
+  setSection("identity");
+  setView("overview");
  }
  function chooseProgram(p:Program){
    const next=programs.includes(p)?programs.filter(x=>x!==p):[...programs,p];
@@ -200,7 +213,7 @@ export default function ApplicationWorkspace(){
     <p><strong>Applicant:</strong> {display(answers["person.name"])} · <strong>Onset:</strong> {display(answers["work.onset"])} · <strong>Reported living arrangement:</strong> {display(answers["living.type"])}</p>
    </section>}
    {view==="evidence"&&<EvidenceRegister evidence={evidence} setEvidence={setEvidence}/>}
-   {view==="package"&&<PackageExport input={{caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog}}/>}
+   {view==="package"&&<PackageExport input={{caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog}} onRestore={restoreSyntheticCase}/>}
    <div hidden={view!=="submissions"}><SubmissionTracker log={submissionLog} setLog={setSubmissionLog} caseReference={caseLabel} programs={programs}/></div>
    <p className="hint">In-memory only · No autosave, transmission, official signature, or SSA eligibility decision. Verify form editions and complete all source questions before using any generated paperwork.</p>
   </div>;
