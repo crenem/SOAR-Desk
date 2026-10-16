@@ -19,6 +19,8 @@ use zeroize::Zeroizing;
 
 pub const ENVELOPE_VERSION: u32 = 1;
 const MAGIC: &str = "SOAR-DESK-SYNTHETIC-SEALED-VAULT";
+const LOCAL_CASE_MAGIC: &str = "SOAR-DESK-LOCAL-CASE-VAULT";
+const LOCAL_CASE_VERSION: u32 = 2;
 pub const MAX_ENVELOPE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_PLAINTEXT_BYTES: usize = 2 * 1024 * 1024;
 const KDF_MEMORY_KIB: u32 = 64 * 1024;
@@ -86,8 +88,9 @@ fn validate_passphrase(passphrase: &str) -> Result<(), VaultCryptoError> {
     Ok(())
 }
 fn validate_vault_id(vault_id: &str) -> Result<(), VaultCryptoError> {
-    if !vault_id.starts_with("SYN-")
+    if !(vault_id.starts_with("SYN-") || vault_id.starts_with("CASE-"))
         || vault_id.len() <= 4
+        || (vault_id.starts_with("CASE-") && vault_id.len() < 16)
         || vault_id.len() > 80
         || !vault_id
             .bytes()
@@ -97,6 +100,25 @@ fn validate_vault_id(vault_id: &str) -> Result<(), VaultCryptoError> {
     }
     Ok(())
 }
+/// Distinguish legacy synthetic snapshots from a versioned local-case format.
+/// CASE- identifiers must be opaque random IDs; never names, SSNs or DOBs.
+fn snapshot_format(json: &serde_json::Value) -> Option<(&'static str, u32)> {
+    let id = json.get("case_reference")?.as_str()?;
+    let kind = json.get("file_kind")?.as_str()?;
+    let version = json.get("schema_version")?.as_u64()?;
+    let synthetic = json.get("synthetic_only")?.as_bool()?;
+    if id.starts_with("SYN-") && synthetic && version == 1
+       && kind == "soar-desk-synthetic-case-snapshot" {
+        Some((MAGIC, ENVELOPE_VERSION))
+    } else if id.starts_with("CASE-") && !synthetic && version == 2
+       && kind == "soar-desk-local-case-snapshot" {
+        Some((LOCAL_CASE_MAGIC, LOCAL_CASE_VERSION))
+    } else { None }
+}
+pub fn encrypted_file_is_synthetic(sealed: &[u8]) -> Result<bool, VaultCryptoError> {
+    let env = parse_envelope(sealed)?;
+    Ok(env.version == ENVELOPE_VERSION)
+}
 fn valid_case(data: &[u8]) -> Result<(), VaultCryptoError> {
     if data.is_empty() || data.len() > MAX_PLAINTEXT_BYTES {
         return Err(VaultCryptoError::InvalidSyntheticPayload);
@@ -105,10 +127,8 @@ fn valid_case(data: &[u8]) -> Result<(), VaultCryptoError> {
         serde_json::from_slice(data).map_err(|_| VaultCryptoError::InvalidSyntheticPayload)?;
     let case_id = json.get("case_reference").and_then(|v| v.as_str()).unwrap_or("");
     validate_vault_id(case_id)?;
-    if json.get("file_kind").and_then(|v| v.as_str())
-        != Some("soar-desk-synthetic-case-snapshot")
-        || json.get("schema_version").and_then(|v| v.as_u64()) != Some(1)
-        || json.get("synthetic_only").and_then(|v| v.as_bool()) != Some(true)
+    let supported_kind = snapshot_format(&json).is_some();
+    if !supported_kind
         || !json.get("answers").is_some_and(|v| v.is_object())
         || !json.get("rows").is_some_and(|v| v.is_object())
         || !json.get("evidence").is_some_and(|v| v.is_array())
@@ -121,8 +141,8 @@ fn valid_case(data: &[u8]) -> Result<(), VaultCryptoError> {
     }
     Ok(())
 }
-fn aad(vault_id: &str, label: &str) -> Vec<u8> {
-    format!("{MAGIC}|v{ENVELOPE_VERSION}|{vault_id}|{label}").into_bytes()
+fn aad_versioned(file_kind: &str, version: u32, vault_id: &str, label: &str) -> Vec<u8> {
+    format!("{file_kind}|v{version}|{vault_id}|{label}").into_bytes()
 }
 fn key_cipher(key: &[u8; 32]) -> Result<Aes256Gcm, VaultCryptoError> {
     Aes256Gcm::new_from_slice(key).map_err(|_| VaultCryptoError::CorruptEnvelope)
@@ -191,6 +211,8 @@ fn derive_kek(passphrase: &str, salt: &[u8; 16]) -> Result<Zeroizing<[u8; 32]>, 
 fn wrap_key(
     role: SlotRole,
     vault_id: &str,
+    magic: &str,
+    version: u32,
     master: &[u8; 32],
     passphrase: &str,
 ) -> Result<WrappedSlot, VaultCryptoError> {
@@ -199,7 +221,7 @@ fn wrap_key(
     Ok(WrappedSlot {
         role,
         salt: STANDARD.encode(salt),
-        wrapped_key: encrypt_block(&kek, master, &aad(vault_id, role.identifier()))?,
+        wrapped_key: encrypt_block(&kek, master, &aad_versioned(magic, version, vault_id, role.identifier()))?,
     })
 }
 fn parse_envelope(input: &[u8]) -> Result<Envelope, VaultCryptoError> {
@@ -208,8 +230,8 @@ fn parse_envelope(input: &[u8]) -> Result<Envelope, VaultCryptoError> {
     }
     let env: Envelope =
         serde_json::from_slice(input).map_err(|_| VaultCryptoError::InvalidFormat)?;
-    if env.file_kind != MAGIC
-        || env.version != ENVELOPE_VERSION
+    if !((env.file_kind == MAGIC && env.version == ENVELOPE_VERSION && env.vault_id.starts_with("SYN-"))
+           || (env.file_kind == LOCAL_CASE_MAGIC && env.version == LOCAL_CASE_VERSION && env.vault_id.starts_with("CASE-")))
         || env.kdf != "argon2id-m65536-t3-p1"
         || env.cipher != "aes-256-gcm"
         || env.slots.len() != 2
@@ -237,7 +259,7 @@ fn unlock_master(
         .ok_or(VaultCryptoError::InvalidFormat)?;
     let salt: [u8; 16] = decode_exact(&slot.salt)?;
     let kek = derive_kek(passphrase, &salt)?;
-    let master = decrypt_block(&kek, &slot.wrapped_key, &aad(&env.vault_id, role.identifier()))?;
+    let master = decrypt_block(&kek, &slot.wrapped_key, &aad_versioned(&env.file_kind,env.version,&env.vault_id, role.identifier()))?;
     let key: [u8; 32] = master
         .as_slice()
         .try_into()
@@ -248,11 +270,12 @@ fn payload_from_master(
     env: &Envelope,
     master: &[u8; 32],
 ) -> Result<Zeroizing<Vec<u8>>, VaultCryptoError> {
-    let value = decrypt_block(master, &env.payload, &aad(&env.vault_id, "payload"))?;
+    let value = decrypt_block(master, &env.payload, &aad_versioned(&env.file_kind,env.version,&env.vault_id, "payload"))?;
     valid_case(&value)?;
     let json: serde_json::Value =
         serde_json::from_slice(&value).map_err(|_| VaultCryptoError::CorruptEnvelope)?;
-    if json.get("case_reference").and_then(|v| v.as_str()) != Some(env.vault_id.as_str()) {
+    if json.get("case_reference").and_then(|v| v.as_str()) != Some(env.vault_id.as_str())
+        || snapshot_format(&json) != Some((env.file_kind.as_str(),env.version)) {
         return Err(VaultCryptoError::AuthenticationFailed);
     }
     Ok(value)
@@ -260,7 +283,7 @@ fn payload_from_master(
 
 /// Create a complete, independently wrapped synthetic vault. Never write
 /// passwords or plaintext data into the header, filename or audit logs.
-pub fn seal_synthetic_case(
+pub fn seal_local_case(
     snapshot_json: &[u8],
     practitioner_passphrase: &str,
     organization_recovery_passphrase: &str,
@@ -276,25 +299,42 @@ pub fn seal_synthetic_case(
     let id = json["case_reference"]
         .as_str()
         .ok_or(VaultCryptoError::InvalidSyntheticPayload)?;
+    let (magic,version)=snapshot_format(&json).ok_or(VaultCryptoError::InvalidFormat)?;
     let master = Zeroizing::new(random::<32>());
     let env = Envelope {
-        file_kind: MAGIC.into(),
-        version: ENVELOPE_VERSION,
+        file_kind: magic.into(),
+        version,
         vault_id: id.into(),
         kdf: "argon2id-m65536-t3-p1".into(),
         cipher: "aes-256-gcm".into(),
         slots: vec![
-            wrap_key(SlotRole::Practitioner, id, &master, practitioner_passphrase)?,
+            wrap_key(SlotRole::Practitioner, id, magic, version, &master, practitioner_passphrase)?,
             wrap_key(
                 SlotRole::OrganizationRecovery,
                 id,
+                magic,
+                version,
                 &master,
                 organization_recovery_passphrase,
             )?,
         ],
-        payload: encrypt_block(&master, snapshot_json, &aad(id, "payload"))?,
+        payload: encrypt_block(&master, snapshot_json, &aad_versioned(magic,version,id, "payload"))?,
     };
     serde_json::to_vec(&env).map_err(|_| VaultCryptoError::CorruptEnvelope)
+}
+
+/// Backward-compatible synthetic-only API for training tests.
+pub fn seal_synthetic_case(
+    snapshot_json: &[u8],
+    practitioner_passphrase: &str,
+    organization_recovery_passphrase: &str,
+) -> Result<Vec<u8>, VaultCryptoError> {
+    let json:serde_json::Value=serde_json::from_slice(snapshot_json)
+      .map_err(|_|VaultCryptoError::InvalidSyntheticPayload)?;
+    if snapshot_format(&json)!=Some((MAGIC,ENVELOPE_VERSION)) {
+      return Err(VaultCryptoError::InvalidSyntheticPayload);
+    }
+    seal_local_case(snapshot_json, practitioner_passphrase, organization_recovery_passphrase)
 }
 
 /// The desktop keeps an opaque, zeroized VMK in native process memory for
@@ -311,13 +351,14 @@ impl UnlockedSession {
         let case: serde_json::Value = serde_json::from_slice(snapshot_json)
             .map_err(|_| VaultCryptoError::InvalidSyntheticPayload)?;
         if case.get("case_reference").and_then(|v| v.as_str())
-            != Some(self.envelope.vault_id.as_str()) {
+            != Some(self.envelope.vault_id.as_str()) ||
+            snapshot_format(&case)!=Some((self.envelope.file_kind.as_str(),self.envelope.version)) {
             return Err(VaultCryptoError::InvalidSyntheticPayload);
         }
         self.envelope.payload = encrypt_block(
             &self.master,
             snapshot_json,
-            &aad(&self.envelope.vault_id, "payload"),
+            &aad_versioned(&self.envelope.file_kind,self.envelope.version,&self.envelope.vault_id, "payload"),
         )?;
         serde_json::to_vec(&self.envelope).map_err(|_| VaultCryptoError::CorruptEnvelope)
     }
@@ -387,7 +428,7 @@ pub fn recover_and_rekey(
     let revised = Zeroizing::new(
         serde_json::to_vec(&snapshot).map_err(|_| VaultCryptoError::CorruptEnvelope)?,
     );
-    seal_synthetic_case(&revised, new_practitioner_passphrase, new_org_passphrase)
+    seal_local_case(&revised, new_practitioner_passphrase, new_org_passphrase)
 }
 
 /// Authenticate the vault before copying the exact encrypted bytes to a
@@ -484,6 +525,28 @@ mod tests {
         assert_eq!(session.encrypt_update(changed.to_string().as_bytes()),Err(VaultCryptoError::InvalidSyntheticPayload));
     }
 
+    #[test]
+    fn local_case_format_v2_is_separate_and_encrypted() {
+        let mut json: serde_json::Value =serde_json::from_slice(&test_case()).unwrap();
+        json["file_kind"]=serde_json::json!("soar-desk-local-case-snapshot");
+        json["schema_version"]=serde_json::json!(2);
+        json["synthetic_only"]=serde_json::json!(false);
+        json["case_reference"]=serde_json::json!("CASE-12345678-90ab-cdef");
+        let payload=json.to_string().into_bytes();
+        let sealed=seal_local_case(&payload,OP,ORG).unwrap();
+        assert!(!encrypted_file_is_synthetic(&sealed).unwrap());
+        assert_eq!(&*open_practitioner(&sealed,OP).unwrap(),&payload);
+        assert_eq!(encrypted_file_is_synthetic(&seal_synthetic_case(&test_case(),OP,ORG).unwrap()),Ok(true));
+        assert_eq!(seal_synthetic_case(&payload,OP,ORG),Err(VaultCryptoError::InvalidSyntheticPayload));
+        let (_,mut session)=unlock_for_autosave(&sealed,OP).unwrap();
+        let copy=session.encrypt_update(&payload).unwrap();
+        assert!(!encrypted_file_is_synthetic(&copy).unwrap());
+        let rekey=recover_and_rekey(&copy,ORG,NEXT_OP,NEXT_ORG,"ORG-CUSTODIAN",
+              "Practitioner replaced after lost machine").unwrap();
+        assert!(!encrypted_file_is_synthetic(&rekey).unwrap());
+        assert!(open_practitioner(&rekey,OP).is_err());
+        assert!(open_practitioner(&rekey,NEXT_OP).is_ok());
+    }
     #[test]
     fn invalid_secrets_and_payloads_fail_closed() {
         assert_eq!(seal_synthetic_case(&test_case(), OP, OP), Err(VaultCryptoError::EqualPassphrases));
