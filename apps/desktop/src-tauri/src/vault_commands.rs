@@ -205,4 +205,69 @@ mod tests {
         assert!(new_encrypted_file(&target("soarbackup"),"soarbackup",b"").is_err());
         assert!(read_encrypted("relative.soarvault").is_err());
     }
+
+    #[test]
+    fn end_to_end_create_open_backup_and_organizational_recovery() {
+        const OP:&str="synthetic-operator-password-2026";
+        const ORG:&str="synthetic-nonprofit-recovery-2026";
+        const NEW_OP:&str="replacement-practitioner-password-2026";
+        const NEW_ORG:&str="replacement-organization-recovery-2026";
+        let original=target("soarvault");
+        let backup=target("soarbackup");
+        let recovered=target("soarvault");
+        let payload=serde_json::json!({
+            "file_kind":"soar-desk-synthetic-case-snapshot",
+            "schema_version":1,"synthetic_only":true,
+            "case_reference":"SYN-CASE-TEST","programs":["ssdi"],
+            "include_deferred":false,
+            "answers":{"person.name":{"value":"Fictional Jane Doe","status":"reported","source":"test"}},
+            "rows":{},"evidence":[],
+            "submissions":{"records":[],"events":[]}
+        });
+        create_synthetic_vault(CreateSyntheticVaultRequest {
+            output_path:original.clone(),snapshot:payload.clone(),
+            practitioner_passphrase:OP.into(),
+            organization_recovery_passphrase:ORG.into(),
+            synthetic_confirmed:true
+        }).unwrap();
+        let file=std::fs::read(&original).unwrap();
+        assert!(!String::from_utf8_lossy(&file).contains("Fictional Jane Doe"));
+        let reopened=open_synthetic_vault(OpenSyntheticVaultRequest {
+            input_path:original.clone(),practitioner_passphrase:OP.into(),
+            synthetic_confirmed:true
+        }).unwrap();
+        assert_eq!(reopened,payload);
+        assert!(open_synthetic_vault(OpenSyntheticVaultRequest {
+            input_path:original.clone(),practitioner_passphrase:ORG.into(),
+            synthetic_confirmed:true
+        }).is_err());
+        backup_synthetic_vault(BackupSyntheticVaultRequest {
+            input_path:original.clone(),output_path:backup.clone(),
+            practitioner_passphrase:OP.into(),synthetic_confirmed:true
+        }).unwrap();
+        assert_eq!(std::fs::read(&backup).unwrap(),file);
+        recover_synthetic_vault(RecoverSyntheticVaultRequest {
+            input_path:backup.clone(),output_path:recovered.clone(),
+            old_organization_passphrase:ORG.into(),
+            new_practitioner_passphrase:NEW_OP.into(),
+            new_organization_passphrase:NEW_ORG.into(),
+            actor_code:"SYN-ORGANIZATION-RECOVERY".into(),
+            recovery_reason:"Fictional practitioner device retirement and approved handoff".into(),
+            synthetic_confirmed:true
+        }).unwrap();
+        assert!(open_synthetic_vault(OpenSyntheticVaultRequest {
+            input_path:recovered.clone(),practitioner_passphrase:OP.into(),
+            synthetic_confirmed:true
+        }).is_err());
+        let new_case=open_synthetic_vault(OpenSyntheticVaultRequest {
+            input_path:recovered.clone(),practitioner_passphrase:NEW_OP.into(),
+            synthetic_confirmed:true
+        }).unwrap();
+        assert!(new_case["recovery_events"].is_array());
+        assert_eq!(new_case["case_reference"],"SYN-CASE-TEST");
+        assert_eq!(std::fs::read(&original).unwrap(),file);
+        for path in [original,backup,recovered] {
+            std::fs::remove_file(path).unwrap();
+        }
+    }
 }
