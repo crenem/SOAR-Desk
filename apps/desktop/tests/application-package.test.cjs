@@ -53,6 +53,9 @@ assert.ok(result.summary.unresolved_questions>0);
 assert.throws(()=>pkg.buildDraftPackage({...input,caseReference:"LIVE-CASE-1"}),/fictional case/);
 assert.throws(()=>pkg.buildDraftPackage({...input,evidence:[{...input.evidence[0],reviewer:""}]}),/reviewer code/);
 assert.throws(()=>pkg.buildDraftPackage({...input,evidence:[input.evidence[0],input.evidence[0]]}),/Duplicate evidence/);
+assert.throws(()=>pkg.buildDraftPackage({...input,evidence:[{...input.evidence[0],location:""}]}),/page\/location/);
+const unreviewed=pkg.buildDraftPackage({...input,evidence:[{...input.evidence[0],status:"pending",reviewer:""}]});
+assert.ok(unreviewed.source_reference_warnings.some(w=>w.includes("not verified evidence")));
 assert.ok(pkg.buildDraftPackage({...input,includeDeferred:true}).forms.some(f=>f.form_id==="SSA-8001-BK"));
 const activity={
  records:[{id:"SYN-PKT-1",caseReference:"SYN-JANE-001",purpose:"disability_evidence",destination:"dds",channel:"ere_portal",
