@@ -38,3 +38,25 @@
 .intake-review summary{cursor:pointer}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
 @media(max-width:820px){.intake-form-card,.intake-formheading{flex-direction:column;align-items:stretch}.intake-form-actions{align-items:flex-start}.intake-tabs{flex-wrap:wrap}}
+
+/* SSA integration-ready submission ledger (local-only preview) */
+.ssa-submission-panel{margin-top:24px}
+.ssa-submission-panel h2{margin-top:8px}
+.submit-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:22px 0}
+.submit-summary div{padding:15px 12px;border-radius:10px;background:#f0f6f7;border:1px solid #dae8ed;display:flex;flex-direction:column;gap:4px}
+.submit-summary strong{font-size:25px;color:#1e5961}
+.submit-summary span{font-size:12px;color:#475f6b}
+.submit-adapters{border:1px solid #d7e3e9;border-radius:9px;padding:17px;margin:14px 0 22px}
+.adapter-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #e4ecee;font-size:13px}
+.adapter-row:last-child{border-bottom:0}
+.adapter-row small{font-size:11px;color:#59717e;text-align:right;max-width:44%}
+.submission-record{border:1px solid #cadce4;border-radius:10px;padding:20px;margin:16px 0}
+.submission-record .rowheader{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.submission-record h4{margin:18px 0 6px}
+.submission-state{font-size:12px;font-weight:800;color:#1b5265;background:#e9f3f6;padding:7px 10px;border-radius:999px;white-space:nowrap}
+.submission-details{margin-top:15px;padding:16px;border-top:1px solid #dde8ed;background:#f8fafb;border-radius:0 0 8px 8px}
+.submission-details label.checkline{font-size:13px;margin:16px 0}
+.submit-resources{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin:22px 0;border-top:1px solid #d7e3e9;padding-top:18px}
+.submit-resources strong,.submit-resources p{flex-basis:100%;margin:0}
+.submit-resources a{font-size:13px;color:#14577a;font-weight:650}
+@media(max-width:650px){.submit-summary{grid-template-columns:1fr}.adapter-row,.submission-record .rowheader{align-items:flex-start;flex-direction:column}.adapter-row small{text-align:left;max-width:100%}.submission-state{white-space:normal}}
