@@ -1,47 +1,59 @@
 # SOAR Desk
 
-**Open-source, local-first tools for disability advocates and nonprofit organizations.**
+**Open-source, local-first SSI/SSDI application preparation for nonprofit practitioners.**
 
-SOAR Desk is a community project to help practitioners organize adult SSI/SSDI referral screening, evidence gathering, applications, deadlines, and outcomes. The project is inspired by the SOAR (SSI/SSDI Outreach, Access, and Recovery) practice model.
+SOAR Desk is an AGPL-3.0 Rust/Tauri 2 + React desktop workbench inspired by the SOAR (SSI/SSDI Outreach, Access, and Recovery) practice model. It organizes applicant interviews, selected SSA form crosswalks, medical evidence review, encrypted local case files, manual submission tracking and nonprofit recovery access.
 
-> **Status: Pre-alpha / development only.** Do not enter real client records, protected health information (PHI), Social Security numbers, or credentials. Encryption, access control, validated workflows, and security review are not yet implemented.
+**Release status: restricted development beta — NOT a production-certified case-management system or SSA filing service.** The current build supports encrypted local `CASE-UUID` cases with a separate nonprofit recovery credential; it does **not** yet provide organizational login, production authorization, SQLCipher, complete SSA form mappings, independently anchored audit trails, full document-retention controls or an assessed PHI security program. Local-case mode requires explicit nonprofit authorization and privacy-risk acknowledgment. Do not assume suitability for handling regulated records merely because a PDF filing channel transmits plaintext.
 
-## Project goals
+## Implemented practitioner features
 
-- Provide a no-cost desktop application that can operate offline.
-- Support transparent referral triage using **functional evidence**, not diagnoses alone.
-- Make SSA requirements distinguishable from SOAR recommendations and local agency policy.
-- Preserve applicant autonomy: the software never makes SSA eligibility determinations or prevents anyone from applying.
-- Make case files portable and avoid vendor lock-in.
-- Eventually offer an optional self-hosted, multi-user nonprofit deployment.
+- Native-function Minimize, Maximize/Restore, Close and draggable custom desktop title bar.
+- Live expandable **form → section → missing field** navigation beneath Application Preparation, with direct jump/focus and conditional question coverage.
+- Guided partial interviews for SSA-16, SSA-8000-BK, SSA-3368-BK, SSA-827, SSA-3369-BK, SSA-3373-BK. SSA-8001-BK remains reference-only.
+- Encrypted whole-case snapshot with automatic 10-second changed-data saves, immediate Save now, encrypted previous version, optional encrypted backup, and nonprofit-held recovery key slot.
+- Distinct training `SYN-` case v1 and restricted local `CASE-UUID` v2 formats. Both use a random vault master key, authenticated AES-256-GCM and independently Argon2id-wrapped practitioner and recovery credentials. Plaintext is not automatically saved on disk by the case snapshot workflow.
+- Document text extraction/OCR and local AI-assisted clinical *suggestions* using Laya and Qwen, followed by human review of source quotes. Verified explicitly labeled identity/measurement fields can be proposed as prefills without overwriting answered fields.
+- Signature drawing or typed-name **internal acknowledgment** linked to the selected form/case SHA-256 fingerprint and signer intent. This is **NOT** an SSA-approved e-signing method or legal SSA-827 signature.
+- Review-only **SSA-16 (09-2025) PDF** rendering from a strictly verified original blank PDF. Training copies are conspicuously marked fictional; local case exports are marked **UNSIGNED — INCOMPLETE WORKING DRAFT**, do not populate signature/bank/SSA-only fields, and are not filed electronically.
+- A manual receipt/submission status log. The application does not transmit to SSA or make eligibility determinations.
 
-## Roadmap
+Read the [workbench release checklist](docs/WORKBENCH-RELEASE-STATUS.md) before using restricted local-case mode.
 
-1. **0.1 — Foundations:** domain models, workflow definitions, synthetic-case tests, practitioner documentation.
-2. **0.2 — Desktop prototype:** Tauri interface, local case management with security gating.
-3. **0.3 — Evidence and tasks:** request tracking, functional assessment, deadline notices.
-4. **Later:** document vault, FAST MSR editor, reporting, and optional agency server.
+## Quick start (Windows on ARM64 via Ubuntu WSL2)
 
-See [project charter](docs/CHARTER.md), [architecture](docs/ARCHITECTURE.md), [workflow reference](docs/SOAR-WORKFLOW.md), and [roadmap](docs/ROADMAP.md).
+Use the existing SOAR Desk Windows shortcut, which executes `scripts/launch-wsl.sh`. This launcher updates `main`, verifies installed local dependencies, checks the GenieX text-generation service, starts CPU fallback only when needed, and runs Tauri in development mode.
 
-## Development
+Inside **Application Preparation** choose **New restricted local case** (opaque UUID), then **Create encrypted case**. Use independent practitioner and nonprofit recovery passwords. Do not place real names, SSNs, or DOBs in a vault filename or path. Case edits are saved every 10 seconds only while a writable encrypted vault remains unlocked. Protect both the vault and the organizational recovery secret under nonprofit policy.
 
-Install the current stable Rust toolchain and run:
+To enable the SSA-16 PDF working preview, download the original blank SSA-16 (09-2025) from https://www.ssa.gov/forms/ssa-16-bk.pdf using a browser. In **SSA exports**, choose **Install SSA-16 PDF from file…**. SOAR Desk verifies its SHA-256 fingerprint before installing; it refuses unknown revisions rather than silently mapping incorrect widgets.
+
+The development build should not be confused with a signed Windows installer or a HIPAA-assessed deployment.
+
+## Development checks
 
 ```bash
 cargo test --workspace
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
+cd apps/desktop
+npm install
+npm run test:workflow
+npm run test:forms
+npm run test:fields
+npm run test:package
+npm run test:submissions
+npm run build
 ```
 
-The repository currently contains the framework-independent Rust domain crate. The Tauri application will be added after the core model and security requirements have been reviewed.
+GitHub Actions also compiles and tests the native Tauri bridge with the required Linux GTK/WebKit dependencies.
 
-## Privacy
+## Known release blockers
 
-**Never open a GitHub issue or pull request containing real client data.** Test fixtures must be invented or irreversibly synthetic. Report vulnerabilities privately using [SECURITY.md](SECURITY.md).
+Completing a **fully usable organizational release** still requires verified mappings for all official forms, finalized paper/electronic signing and filing pathways, encrypted original attachments and recoverable backups, role-based case permissions, secure Windows credential handling, audit/retention and privacy assessment, full restore testing and platform packaging. See [the status checklist](docs/WORKBENCH-RELEASE-STATUS.md) and [production architecture](docs/PRODUCTION-VAULT-ADR.md). Do not misrepresent working PDF previews, internal signatures or staff-entered receipts as SSA-accepted filings.
 
-## License
+## Privacy and licensing
 
-The software is licensed under **GNU Affero General Public License v3.0 only (AGPL-3.0-only)**. See [LICENSE](LICENSE). Contributed project documentation is also distributed under the same license unless explicitly marked otherwise. Third-party official forms, agency materials, trademarks, and SOAR/PRA content retain their respective rights; the project does not claim ownership of them.
+Never open a GitHub issue, pull request, or diagnostic containing client data or credentials. Test fixtures in this public repository must remain invented or irreversibly synthetic. Report vulnerabilities privately using [SECURITY.md](SECURITY.md).
 
-SOAR Desk is an independent community project, not affiliated with or endorsed by SSA, SAMHSA, or Policy Research Associates.
+Software license: **GNU Affero General Public License v3.0 only (AGPL-3.0-only)**. Third-party official forms, agency material, trademarks, and SOAR/PRA content retain their respective rights. SOAR Desk is an independent community project, not affiliated with or endorsed by SSA, SAMHSA or Policy Research Associates.
