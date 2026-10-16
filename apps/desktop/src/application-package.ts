@@ -15,6 +15,11 @@ export type EvidenceReference={
   note:string;
   status:EvidenceStatus;
   reviewer:string;
+  /** Original bytes live as a separately encrypted blob alongside the vault. */
+  blobId?:string;
+  originalFilename?:string;
+  sha256?:string;
+  bytes?:number;
 };
 export type SyntheticRecoveryEvent={
   event:string;actor:string;reason:string;old_vault_retirement:string;
