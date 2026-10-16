@@ -98,7 +98,7 @@ export default function VaultLab({input,onRestore,onVaultReady,initialMode="crea
          input_path:selected,practitioner_passphrase:practitioner,synthetic_confirmed:true}});
        const data=asCase(restored);
        if(!window.confirm("Replace the current in-memory synthetic interview, evidence and submission history with "+data.caseReference+"?")){
-         await invoke("lock_synthetic_autosave");return;
+         await invoke("lock_synthetic_autosave");onVaultReady?.(null);return;
        }
        onRestore(data);
        onVaultReady?.(selected.endsWith(".soarvault")?selected:null);
