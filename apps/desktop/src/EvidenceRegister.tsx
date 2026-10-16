@@ -1,14 +1,47 @@
 import type { EvidenceReference,EvidenceStatus } from "./application-package";
-import type { Dispatch,SetStateAction } from "react";
+import {useState,type Dispatch,type SetStateAction} from "react";
+import {invoke} from "@tauri-apps/api/core";
+import {open,save} from "@tauri-apps/plugin-dialog";
 
-type Props={evidence:EvidenceReference[];setEvidence:Dispatch<SetStateAction<EvidenceReference[]>>;syntheticOnly?:boolean};
+type Props={evidence:EvidenceReference[];setEvidence:Dispatch<SetStateAction<EvidenceReference[]>>;syntheticOnly?:boolean;caseReference:string};
 const kinds:{value:EvidenceReference["kind"];label:string}[]=[
  {value:"medical",label:"Medical or clinical record"},
  {value:"employment",label:"Employment / vocational record"},
  {value:"applicant_statement",label:"Applicant / witness statement"},
  {value:"other",label:"Other source"}
 ];
-export default function EvidenceRegister({evidence,setEvidence,syntheticOnly=true}:Props){
+export default function EvidenceRegister({evidence,setEvidence,syntheticOnly=true,caseReference}:Props){
+ const [busy,setBusy]=useState<string|null>(null);
+ const [error,setError]=useState("");
+ const [notice,setNotice]=useState("");
+ type Attachment={blob_id:string;original_name:string;bytes:number;sha256:string;encrypted_path:string};
+ async function attach(id:string){
+  setError("");setNotice("");setBusy(id);
+  try{
+   const path=await open({multiple:false,directory:false,title:"Select a local document to encrypt inside this case",filters:[{name:"Evidence documents",extensions:["pdf","png","jpg","jpeg","tif","tiff","txt"]}]});
+   if(typeof path!=="string")return;
+   const record=await invoke<Attachment>("attach_evidence_document",{request:{source_path:path,case_reference:caseReference,synthetic_confirmed:syntheticOnly,local_risk_acknowledged:!syntheticOnly}});
+   change(id,{blobId:record.blob_id,originalFilename:record.original_name,sha256:record.sha256,bytes:record.bytes});
+   setNotice("Source encrypted and attached to "+id+". Save the case to preserve its metadata.");
+  }catch(e){setError(String(e));}
+  finally{setBusy(null);}
+ }
+ async function exportAttached(item:EvidenceReference){
+  if(!item.blobId)return;
+  setError("");setNotice("");setBusy(item.id);
+  try{
+   if(!window.confirm("This will create a new UNENCRYPTED source document. Continue only to an authorized, protected destination."))return;
+   const ext=item.originalFilename?.split(".").pop()?.toLowerCase()||"pdf";
+   const allowed=["pdf","png","jpg","jpeg","tif","tiff","txt"];
+   const extension=allowed.includes(ext)?ext:"pdf";
+   const output=await save({title:"Export decrypted source — creates an unencrypted copy",defaultPath:item.originalFilename||"evidence."+extension,filters:[{name:"Source document",extensions:[extension]}]});
+   if(!output)return;
+   await invoke<string>("export_evidence_document",{request:{case_reference:caseReference,blob_id:item.blobId,output_path:output,acknowledge_plaintext_export:true}});
+   setNotice("Decrypted source exported to "+output+". Handle and delete copies according to organizational policy.");
+  }catch(e){setError(String(e));}
+  finally{setBusy(null);}
+ }
+
  function add(){
    const prefix=syntheticOnly?"SYN-EV-":"EV-";
    const indices=evidence.map(e=>Number(e.id.match(new RegExp("^"+prefix+"(\\d+)$"))?.[1]||0));
@@ -41,7 +74,16 @@ export default function EvidenceRegister({evidence,setEvidence,syntheticOnly=tru
    </div>
    {e.status==="human_verified"&&<label>Reviewer identifier (required)<input value={e.reviewer} onChange={ev=>change(e.id,{reviewer:ev.target.value})} placeholder="Authorized reviewer code"/></label>}
    <label>Evidence note, limited to supported facts<textarea rows={2} value={e.note} onChange={ev=>change(e.id,{note:ev.target.value})} placeholder="Describe what the source actually states and what remains uncertain."/></label>
-   <button type="button" className="linkbutton" onClick={()=>setEvidence(list=>list.filter(item=>item.id!==e.id))}>Remove source reference</button>
+   <div className="actions">
+     {!e.blobId?<button type="button" className="secondary" disabled={busy!==null} onClick={()=>void attach(e.id)}>Attach encrypted source…</button>:<>
+       <span className="hint">Encrypted source: {e.originalFilename||"document"} · {e.bytes??0} bytes · SHA-256 {e.sha256?.slice(0,12)}…</span>
+       <button type="button" className="secondary" disabled={busy!==null} onClick={()=>void exportAttached(e)}>Export decrypted copy…</button>
+     </>}
+     <button type="button" className="linkbutton" disabled={busy!==null} onClick={()=>{
+       if(e.blobId&&!window.confirm("Remove this reference? The encrypted source blob remains on disk until separately retired."))return;
+       setEvidence(list=>list.filter(item=>item.id!==e.id));
+     }}>Remove source reference</button>
+   </div>
   </fieldset>)}
   <button className="secondary" type="button" onClick={add}>Add evidence reference</button>
  </section>;
