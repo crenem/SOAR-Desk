@@ -1,6 +1,6 @@
 # SOAR Desk production data architecture — proposed ADR 0002
 
-**Status: deployment profile clarified; crypto/recovery/sync decisions remain proposed, not deployed or approved.** 2026-10-16. The live desktop app remains a fictional-data prototype. The repo now includes a Rust `soar-storage` domain boundary and schema v1. There is **no disk adapter and no permission to enter real PII/PHI**.
+**Status: nonprofit single-practitioner deployment AND organizational recovery authority approved; cryptographic implementation, recovery ceremony, and sync remain proposed, not deployed.** 2026-10-16. The live desktop app remains a fictional-data prototype. The repo now includes a Rust `soar-storage` domain boundary and schema v1. There is **no disk adapter and no permission to enter real PII/PHI**.
 
 ## Goals and trust assumptions
 
@@ -79,6 +79,19 @@ The exported synthetic JSON draft is a development diagnostic, not the permanent
 
 The field table contains per-instance form IDs, edition, answer state, assertion source and evidence association. The **source SSN and demographic data currently shown in the React interview still exist in unencrypted process memory**: this is not a finished secure local client implementation.
 
+## Organizational recovery: approved governance requirement (implementation pending)
+
+This policy answers the question **who may authorize restoration**; it does not determine cryptographic implementation and does not mean a nonprofit administrator can casually browse case files.
+
+1. **Enrollment:** the nonprofit designates the active SOAR practitioner and a *different* organizational recovery custodian; create separate daily unlock and organizational recovery key-wrapping slots against a random vault master key. The custodian's recovery capability must survive loss of the employee's Windows account or original machine.
+2. **Routine operation:** the practitioner unlocks and uses only their assigned local role. Custodian membership does not grant normal case-listing, search, export, decryption or evidence-review privileges.
+3. **Recovery incident:** a custodian documents the reason (lost device, disabled account, employee departure, disaster), verifies authorization through an organization-approved identity procedure, and invokes a dedicated recovery flow. Recovery produces an audit event with purpose and actor, never a silent bypass.
+4. **Reassignment:** on successful vault restoration, establish an explicit new practitioner's unlock slot, invalidate the superseded credential where feasible, assess whether key rotation or re-encryption is needed, and verify least-privilege case grants.
+5. **Backups:** the organization restores both encrypted database and encrypted attachments, verifying integrity, key version, and recoverability. Encrypted backups and recovery materials must not be in the same single failure domain.
+6. **Governance still open:** whether one designated custodian can approve an emergency, whether dual-control is required, how recovery secrets are physically stored, which cryptographic wrapping primitive is acceptable, and retention/incident-response rules.
+
+The new `soar-storage::recovery` module implements **metadata-only, fail-closed policy validation** for a distinct recovery custodian and two unlock-slot types. It contains no cryptographic implementation and does not write any real vault secrets.
+
 ## Release gates (fail closed, no real-case switch before all pass)
 
 - [ ] Confirm deployment responsibility, HIPAA/contract/SSA constraints, case retention and staff roles.
@@ -98,7 +111,7 @@ The field table contains per-instance form IDs, edition, answer state, assertion
 - **Primary client:** nonprofit SOAR provider, typically operating with one named practitioner using a local-first Windows desktop.
 - **Custody:** one organization-owned vault, distinct from its operator's personal account; transfers, retention and destruction remain subject to organization policy.
 - **Account model:** one routine case operator in the first release; reserve roles for a separately authenticated, explicitly authorized recovery custodian and a future replacement practitioner, without implementing a multiuser collaboration server.
-- **Recovery:** strongly recommend a designated nonprofit recovery custodian with an independently protected recovery capability. **This is a recommendation, not a user-approved recovery method**; the exact authorization and key escrow policy need confirmation.
+- **Recovery: approved organizational authority.** The nonprofit retains an independently protected recovery capability separate from the daily practitioner's credentials. A specifically designated custodian can conduct emergency restoration under a documented, auditable process; this does **not** confer routine browse access. Custodian appointment process, dual-control policy and cryptographic escrow method still need review.
 - **Sync:** offline-first single-device by default; optional future organization-managed encrypted sync is a separate product milestone requiring multi-device conflict and revocation controls.
 - **Backups:** encrypted, tested restorability, and organization-controlled continuity through staff transitions; never depend solely on a departed practitioner's personal Windows profile or a single device-bound key.
 - **Handoff:** versioned, purpose-limited encrypted `.soarcase` format is proposed; no handoff exporter exists yet.
@@ -110,7 +123,7 @@ The field table contains per-instance form IDs, edition, answer state, assertion
 
 **D2 — Sync:** (A) offline standalone device only; (B) optional nonprofit-managed encrypted sync; (C) centrally hosted multi-user app. **Recommended: A first, design interfaces for B.**
 
-**D3 — Recovery:** (A) user-held recovery key only; (B) organization-admin recovery + auditable grants. **Recommended B for an organization**, because provider coverage and continuity must survive turnover.
+**D3 — Recovery: RESOLVED (user guidance 2026-10-16).** The nonprofit retains **organizational recovery authority** independently of the sole practitioner's Windows profile, password or device. Implement separate practitioner and organizational VMK-wrapping slots, an explicit recovery and reassignment event, and no default administrator read access. The specific custody mechanism (offline recovery kit vs audited organizational escrow), number of approvers, identity checks and emergency workflow remain engineering/governance choices subject to security review.
 
 **D4 — Compatibility and compliance:** Windows-native first vs cross-platform; specify whether any employer/covered-entity mandate requires FIPS validated crypto implementation, MDM, SSO/Entra ID or centralized audit. This determines viable libraries and deployment packaging.
 
