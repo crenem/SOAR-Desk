@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SOAR Desk local-only Qwen candidate extraction: GenieX NPU or llama.cpp CPU.
+"""SOAR Desk local-only Qwen candidate extraction: GenieX GGUF or llama.cpp CPU.
 
 All inputs must be synthetic. Only 127.0.0.1 endpoints are permitted.
 """
@@ -91,7 +91,6 @@ def geniex_completion(model, messages, *, max_tokens=650, temperature=0.2,
             "model": model, "stream": False,
             "temperature": temperature if attempt == 0 else 0.6,
             "max_tokens": max_tokens,
-            "enable_think": False,
             "messages": messages,
         }
         try:
@@ -119,28 +118,33 @@ def request_model(text):
                 base, model = GENIEX_BASE, geniex_model()
             else:
                 base, model = CPU_BASE, "qwen3-4b"
-            payload = {
-                "model": model, "stream": False, "temperature": 0.1,
-                "max_tokens": 650,
-                "messages": [
-                    {"role": "system", "content": SYSTEM},
-                    {"role": "user", "content": "Extract source-grounded candidate findings from this SYNTHETIC passage:\n" + text + "\n/no_think"},
-                ],
-            }
-            if backend == "cpu":
-                payload["response_format"] = {"type": "json_object"}
-            else:
-                # Qualcomm's GenieX OpenAI endpoint supports disabling Qwen thinking.
-                # The extraction budget should go to source-linked JSON, not reasoning.
-                payload["enable_think"] = False
+            # The Windows GenieX GGUF adapter was experimentally verified to
+            # produce 0 tokens with the explicit enable_think=false extension,
+            # while the same model succeeds when the key is OMITTED. Moreover,
+            # the verified Windows HTTP request used one user message. Keep
+            # the instruction text, but put it in that user message for GenieX.
+            user_message = "Extract source-grounded candidate findings from this SYNTHETIC passage:\n" + text
             if backend == "npu":
-                # Only retries transient blank/malformed GenieX responses.
+                geniex_messages = [{
+                    "role": "user",
+                    "content": SYSTEM + "\n\n" + user_message +
+                    "\nReturn strictly one JSON object. No markdown or introductory text."
+                }]
                 result = geniex_completion(
-                    model, payload["messages"], max_tokens=650,
+                    model, geniex_messages, max_tokens=650,
                     temperature=0.1, require_json=True
                 )
             else:
-                result = local_json(base + "/chat/completions", payload, timeout=180)
+                cpu_payload = {
+                    "model": model, "stream": False, "temperature": 0.1,
+                    "max_tokens": 650,
+                    "response_format": {"type": "json_object"},
+                    "messages": [
+                        {"role": "system", "content": SYSTEM},
+                        {"role": "user", "content": user_message + "\n/no_think"},
+                    ],
+                }
+                result = local_json(base + "/chat/completions", cpu_payload, timeout=180)
                 choices = result.get("choices") or []
                 message = choices[0].get("message") if choices else None
                 if not isinstance(message, dict) or not str(message.get("content") or "").strip():
