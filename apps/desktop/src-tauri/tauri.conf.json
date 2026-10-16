@@ -12,11 +12,16 @@
   "app": {
     "windows": [
       {
-        "title": "SOAR Desk — Development Preview",
+        "title": "SOAR Desk",
         "width": 1220,
         "height": 820,
         "minWidth": 780,
-        "minHeight": 600
+        "minHeight": 600,
+        "decorations": false,
+        "resizable": true,
+        "maximizable": true,
+        "minimizable": true,
+        "closable": true
       }
     ],
     "security": {
