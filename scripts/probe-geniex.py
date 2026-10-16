@@ -14,12 +14,14 @@ from qwen_worker import geniex_completion, geniex_model, parse_content
 
 def main():
     model = geniex_model()
+    # Match the verified successful Windows GenieX HTTP shape: one user
+    # message, no enable_think key, nonstreaming reply. Require JSON because
+    # the actual evidence worker needs a parseable object, not arbitrary prose.
     messages = [
-        {"role": "system", "content": "Return a short JSON object. No markdown or reasoning."},
         {"role": "user", "content":
-         'Synthetic note: "Jane Doe reports knee pain." '
-         'Reply with JSON only: {"summary":"Jane Doe reports knee pain.",'
-         '"findings":[]}'}
+         'Synthetic system diagnostic. Reply with ONLY a JSON object, no markdown. '
+         'Record: "Jane Doe reports knee pain." '
+         'Response: {"summary":"Jane Doe reports knee pain.","findings":[]}'}
     ]
     response = geniex_completion(
         model, messages, max_tokens=256, temperature=0.2, require_json=True
