@@ -12,9 +12,11 @@ const message=(e:unknown)=>e instanceof Error?e.message:String(e);
 function asCase(value:unknown):PackageInput{
  if(!value||typeof value!=="object")throw Error("Invalid encrypted snapshot.");
  const v=value as Record<string,unknown>;
- if(v.file_kind!=="soar-desk-synthetic-case-snapshot"||v.schema_version!==1||v.synthetic_only!==true)
-   throw Error("Not a supported synthetic case snapshot.");
- if(typeof v.case_reference!=="string"||!/^SYN-[A-Za-z0-9_-]{1,76}$/.test(v.case_reference))
+ const training=v.file_kind==="soar-desk-synthetic-case-snapshot"&&v.schema_version===1&&v.synthetic_only===true;
+ const local=v.file_kind==="soar-desk-local-case-snapshot"&&v.schema_version===2&&v.synthetic_only===false;
+ if(!training&&!local)throw Error("Not a supported encrypted case snapshot.");
+ if(typeof v.case_reference!=="string"||
+   !(training?/^SYN-[A-Za-z0-9_-]{1,76}$/:/^CASE-[A-Za-z0-9_-]{11,75}$/).test(v.case_reference))
    throw Error("Unsafe case reference.");
  if(!Array.isArray(v.programs)||!v.programs.length||v.programs.some(p=>p!=="ssi"&&p!=="ssdi"))
    throw Error("Invalid program selections.");
@@ -27,6 +29,7 @@ function asCase(value:unknown):PackageInput{
    throw Error("Invalid case activity history.");
  return {
    caseReference:v.case_reference,
+   syntheticOnly:training,
    programs:v.programs as PackageInput["programs"],
    includeDeferred:v.include_deferred===true,
    answers:v.answers as PackageInput["answers"],
@@ -41,6 +44,7 @@ export default function VaultLab({input,onRestore,onVaultReady,initialMode="crea
  const [mode,setMode]=useState<Mode>(initialMode);
  useEffect(()=>{setMode(initialMode);},[initialMode]);
  const [selected,setSelected]=useState("");
+ const [selectedMode,setSelectedMode]=useState<"training"|"local">(input.syntheticOnly===false?"local":"training");
  const [practitioner,setPractitioner]=useState("");
  const [orgRecovery,setOrgRecovery]=useState("");
  const [nextPractitioner,setNextPractitioner]=useState("");
@@ -48,6 +52,8 @@ export default function VaultLab({input,onRestore,onVaultReady,initialMode="crea
  const [actor,setActor]=useState("SYN-RECOVERY-CUSTODIAN");
  const [reason,setReason]=useState("");
  const [confirmed,setConfirmed]=useState(false);
+ const isTraining=mode==="create"?input.syntheticOnly!==false:selectedMode==="training";
+ const securityArgs={synthetic_confirmed:isTraining,local_risk_acknowledged:!isTraining};
  const [busy,setBusy]=useState(false);
  const [feedback,setFeedback]=useState("");
  const [error,setError]=useState("");
@@ -64,9 +70,9 @@ export default function VaultLab({input,onRestore,onVaultReady,initialMode="crea
  }
  function snapshot(){
    return {
-     file_kind:"soar-desk-synthetic-case-snapshot",
-     schema_version:1,
-     synthetic_only:true,
+     file_kind:input.syntheticOnly===false?"soar-desk-local-case-snapshot":"soar-desk-synthetic-case-snapshot",
+     schema_version:input.syntheticOnly===false?2:1,
+     synthetic_only:input.syntheticOnly!==false,
      case_reference:input.caseReference,
      programs:input.programs,
      include_deferred:input.includeDeferred,
@@ -85,26 +91,26 @@ export default function VaultLab({input,onRestore,onVaultReady,initialMode="crea
    try{
      if(mode==="create"){
        const output=await save({title:"Create encrypted fictional SOAR vault",
-         defaultPath:input.caseReference+"-TRAINING.soarvault",
+         defaultPath:input.caseReference+"-ENCRYPTED.soarvault",
          filters:[{name:"Encrypted vault",extensions:["soarvault"]}]});
        if(!output)return;
        const result=await invoke<Saved>("create_synthetic_vault",{request:{
          output_path:output,snapshot:snapshot(),practitioner_passphrase:practitioner,
-         organization_recovery_passphrase:orgRecovery,synthetic_confirmed:true}});
+         organization_recovery_passphrase:orgRecovery,...securityArgs}});
        setSelected(result.path);
        onVaultReady?.(result.path);
-       setFeedback("Encrypted training case saved: "+result.path+". Keep both credentials separately; this is NOT production-grade case storage.");
+       setFeedback("Encrypted case saved: "+result.path+". Separate the organization recovery secret from the practitioner secret. This version is not independently security-certified.");
      }else if(mode==="open"){
        if(!selected)throw Error("Select an encrypted vault or backup.");
        const restored=await invoke<unknown>("open_synthetic_vault",{request:{
-         input_path:selected,practitioner_passphrase:practitioner,synthetic_confirmed:true}});
+         input_path:selected,practitioner_passphrase:practitioner,...securityArgs}});
        const data=asCase(restored);
        if(!window.confirm("Replace the current in-memory synthetic interview, evidence and submission history with "+data.caseReference+"?")){
          await invoke("lock_synthetic_autosave");onVaultReady?.(null);return;
        }
        onRestore(data);
        onVaultReady?.(selected.endsWith(".soarvault")?selected:null);
-       setFeedback("Decrypted and restored fictional case "+data.caseReference+" into this session. This is not a production case login.");
+       setFeedback("Decrypted and restored case "+data.caseReference+" into this session. This is a local vault unlock, not an organizational login.");
      }else if(mode==="backup"){
        if(!selected)throw Error("Select an encrypted source vault.");
        const output=await save({title:"Save encrypted training vault backup",
@@ -113,7 +119,7 @@ export default function VaultLab({input,onRestore,onVaultReady,initialMode="crea
        if(!output)return;
        const result=await invoke<Saved>("backup_synthetic_vault",{request:{
          input_path:selected,output_path:output,
-         practitioner_passphrase:practitioner,synthetic_confirmed:true}});
+         practitioner_passphrase:practitioner,...securityArgs}});
        setFeedback("Verified and backed up encrypted bytes to "+result.path+". The backup is still readable with the old credentials.");
      }else{
        if(!selected)throw Error("Select an original encrypted vault or backup.");
@@ -127,28 +133,32 @@ export default function VaultLab({input,onRestore,onVaultReady,initialMode="crea
          old_organization_passphrase:orgRecovery,
          new_practitioner_passphrase:nextPractitioner,
          new_organization_passphrase:nextRecovery,
-         actor_code:actor,recovery_reason:reason,synthetic_confirmed:true}});
+         actor_code:actor,recovery_reason:reason,...securityArgs}});
        onVaultReady?.(null);
-       setFeedback("Recovered and re-encrypted into "+result.path+". The old file must be separately retired; emergency audit is only embedded in the new synthetic file.");
+       setFeedback("Recovered and re-encrypted into "+result.path+". Older copies remain readable with their old secrets; independent audit and retirement are still needed.");
      }
    }catch(e){setError(message(e));}
    finally{clearSecrets();setBusy(false);}
  }
  return <section className="vault-lab">
-  <div className="eyebrow">ENCRYPTED FILE RESEARCH · SYNTHETIC ONLY</div>
-  <h3>Experimental encrypted case vault</h3>
-  <p className="muted">Test local encryption, practitioner unlocking, independently protected nonprofit recovery, and ciphertext backups. Files use AES-256-GCM and password-derived wrapping keys. This does <strong>not</strong> implement SQLCipher, Windows Hello, staff permissions, external audit, encrypted attachments or production-ready recovery governance.</p>
+  <div className="eyebrow">{isTraining?"ENCRYPTED TRAINING VAULT":"RESTRICTED ENCRYPTED LOCAL CASE · SECURITY REVIEW INCOMPLETE"}</div>
+  <h3>Encrypted case file and nonprofit recovery</h3>
+  <p className="muted">Encrypt, reopen, back up, and recover a local case. Uses AES-256-GCM, Argon2id-derived separate practitioner and nonprofit recovery keys. This release still lacks SQLCipher, Windows Hello, authenticated organizational staff permissions, independent audit, encrypted source documents, and completed compliance assessment.</p>
   <div className="intake-tabs" role="group" aria-label="Vault operations">
    {(["create","open","backup","recover"] as Mode[]).map(m=><button type="button" key={m}
      className={mode===m?"active":""} onClick={()=>{setMode(m);clearSecrets();setError("");setFeedback("");}}>
       {m==="create"?"Create":m==="open"?"Unlock and load":m==="backup"?"Encrypted backup":"Nonprofit recovery"}
     </button>)}
   </div>
+  {mode!=="create"&&<label>Encrypted file category<select value={selectedMode} onChange={e=>{setSelectedMode(e.target.value as "training"|"local");setConfirmed(false);}}>
+    <option value="training">Fictional training case (SYN-)</option>
+    <option value="local">Restricted local case (CASE-)</option>
+   </select></label>}
   {mode!=="create"&&<div className="vault-source">
    <p className="hint"><strong>Selected encrypted file:</strong> {selected||"None selected"}</p>
    <button type="button" className="secondary" onClick={chooseInput}>Choose .soarvault or .soarbackup…</button>
   </div>}
-  {mode==="create"&&<p className="hint">Creates a new, encrypted, versioned copy of the current fictional case: <strong>{input.caseReference}</strong>. No existing file is overwritten.</p>}
+  {mode==="create"&&<p className="hint">Creates a new, encrypted, versioned copy of the current case: <strong>{input.caseReference}</strong>. No existing file is overwritten.</p>}
   {(mode==="create"||mode==="open"||mode==="backup")&&<label>Practitioner passphrase (16+ characters)
    <input autoComplete="new-password" type="password" value={practitioner} onChange={e=>setPractitioner(e.target.value)}/>
   </label>}
@@ -167,13 +177,15 @@ export default function VaultLab({input,onRestore,onVaultReady,initialMode="crea
   </>}
   <label className="checkline">
    <input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>
-   I confirm all case details and credentials entered here are fictional training information. I understand these files are not approved for real client records.
+   {isTraining?
+     "I confirm this file contains only fictional training information.":
+     "I am authorized by the nonprofit to use this local encrypted case. I understand this development build has NOT completed a medical-data security/compliance review, and my organization must authorize its use, protected backup, recovery and retention."}
   </label>
   <button type="button" className="primary" disabled={!confirmed||busy} onClick={execute}>
-   {busy?"Working…":mode==="create"?"Save encrypted fictional case…":mode==="open"?"Unlock and restore interview":mode==="backup"?"Create encrypted backup…":"Rekey for a new practitioner…"}
+   {busy?"Working…":mode==="create"?"Create encrypted case…":mode==="open"?"Unlock and restore interview":mode==="backup"?"Create encrypted backup…":"Rekey for a new practitioner…"}
   </button>
   {error&&<p role="alert" className="error">{error}</p>}
   {feedback&&<p role="status" className="success">{feedback}</p>}
-  <p className="hint">Training warning: passphrases travel through the current desktop webview and native bridge. Password boxes are cleared after each operation, but this prototype does not provide protected OS-backed credential entry or a production key vault.</p>
+  <p className="hint">Security limitation: passphrases pass through the desktop webview and native bridge, then the UI clears its password fields. This is not OS-backed credential storage or an independently reviewed case-management deployment.</p>
  </section>;
 }
