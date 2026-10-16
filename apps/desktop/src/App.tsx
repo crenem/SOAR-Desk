@@ -32,6 +32,7 @@ export default function App() {
   const [step, setStep] = useState(0);
   const [workspaceMode, setWorkspaceMode] = useState<"screening"|"documents"|"applications">("applications");
   const [caseReference,setCaseReference]=useState("SYN-APPLICATION-001");
+  const [syntheticOnly,setSyntheticOnly]=useState(true);
   const [prefill,setPrefill]=useState<{caseReference:string;items:PrefillSuggestion[]}|null>(null);
   const [formTree,setFormTree]=useState<FormCoverage[]>([]);
   const [jump,setJump]=useState<{target:MissingTarget;token:number}|null>(null);
@@ -80,18 +81,19 @@ export default function App() {
         setJump(old=>({target,token:(old?.token??0)+1}));setWorkspaceMode("applications");
       }}/>}
       {workspaceMode==="screening"&&<ol className="steps">{steps.map((label,index) => <li key={label}><button className={index === step ? "active" : ""} aria-current={step === index ? "step" : undefined} onClick={() => {setStep(index);setError("");}}><span className="stepnumber">{index + 1}</span>{label}</button></li>)}</ol>}
-      <div className="side-note"><strong>Development preview</strong><p>Synthetic data only. Encrypted case saving is available after opening a fictional vault. No production identity, access controls, or PHI storage.</p></div>
+      <div className="side-note"><strong>Restricted development build</strong><p>Encrypted local cases require independent nonprofit authorization and security review. Official SSA form/signing workflows remain incomplete.</p></div>
     </aside>
     <main id="main" className="main" tabIndex={-1}>
-      <header className="topbar"><span>Adult SSI/SSDI · {workspaceMode==="applications"?"Application preparation":workspaceMode==="documents"?"Evidence review":"Referral screening"}</span><span className="demo">SYNTHETIC DATA ONLY</span></header>
+      <header className="topbar"><span>Adult SSI/SSDI · {workspaceMode==="applications"?"Application preparation":workspaceMode==="documents"?"Evidence review":"Referral screening"}</span><span className="demo">{syntheticOnly?"SYNTHETIC DATA ONLY":"RESTRICTED LOCAL CASE · NOT DEPLOYMENT-APPROVED"}</span></header>
       <div className="content" hidden={workspaceMode!=="applications"}><ApplicationWorkspace
         onCaseChange={setCaseReference}
+        onCaseModeChange={setSyntheticOnly}
         prefill={prefill?.caseReference===caseReference?prefill.items:[]}
         onPrefillApplied={()=>setPrefill(null)}
         onProgress={setFormTree}
         navigate={jump}
       /></div>
-      <div className="content" hidden={workspaceMode!=="documents"}><Documents caseReference={caseReference} onPrefill={(items,forCase)=>{
+      <div className="content" hidden={workspaceMode!=="documents"}><Documents caseReference={caseReference} syntheticOnly={syntheticOnly} onPrefill={(items,forCase)=>{
         setPrefill({caseReference:forCase,items});setWorkspaceMode("applications");
       }}/></div>
       {workspaceMode==="screening" ? <div className="content"><div className="eyebrow">STEP {step + 1} OF {steps.length}</div><h1>{steps[step]}</h1>
