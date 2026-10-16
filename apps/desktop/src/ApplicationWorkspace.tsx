@@ -10,6 +10,7 @@ import VaultLab from "./VaultLab";
 import SignatureWorkbench from "./SignatureWorkbench";
 import type {SignatureReceipt} from "./signature-policy";
 import type {PrefillSuggestion} from "./document-prefill";
+import type {AttachedSource} from "./evidence-attachment";
 import {kindFor,inputMask,normalizeOnBlur,validateDisplay} from "./field-format";
 import {formCoverage,type FormCoverage,type MissingTarget} from "./form-navigation";
 import type {EvidenceReference,PackageInput,SyntheticRecoveryEvent} from "./application-package";
@@ -24,10 +25,10 @@ const statuses:{value:AnswerStatus;label:string}[]=[
 const display=(s:Response|undefined)=>s?.status==="unknown"?"Unknown":s?.value || "Not collected";
 const fieldsOf=(rows:Rows,key:string)=>rows[key]??[];
 type View="overview"|"interview"|"review"|"evidence"|"package"|"submissions"|"casefiles"|"signatures";
-type Props={onCaseChange?:(ref:string)=>void;onCaseModeChange?:(syntheticOnly:boolean)=>void;prefill?:PrefillSuggestion[];onPrefillApplied?:()=>void;onProgress?:(items:FormCoverage[])=>void;navigate?:{target:MissingTarget;token:number}|null};
+type Props={onCaseChange?:(ref:string)=>void;onCaseModeChange?:(syntheticOnly:boolean)=>void;prefill?:PrefillSuggestion[];onPrefillApplied?:()=>void;onProgress?:(items:FormCoverage[])=>void;navigate?:{target:MissingTarget;token:number}|null;inboundEvidence?:{source:AttachedSource;caseReference:string;sequence:number}|null;onEvidenceReceived?:()=>void};
 
 
-export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,prefill=[],onPrefillApplied,onProgress,navigate}:Props){
+export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,prefill=[],onPrefillApplied,onProgress,navigate,inboundEvidence,onEvidenceReceived}:Props){
  const [programs,setPrograms]=useState<Program[]>(["ssi","ssdi"]);
  const [formId,setFormId]=useState<FormId>("SSA-3368-BK");
  const [section,setSection]=useState("identity");
@@ -41,6 +42,26 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
  const [evidence,setEvidence]=useState<EvidenceReference[]>([]);
  const [recoveryEvents,setRecoveryEvents]=useState<SyntheticRecoveryEvent[]>([]);
  const [signatures,setSignatures]=useState<SignatureReceipt[]>([]);
+ useEffect(()=>{
+   if(!inboundEvidence)return;
+   if(inboundEvidence.caseReference!==caseLabel)return;
+   const attached=inboundEvidence.source;
+   setEvidence(items=>{
+     if(items.some(item=>item.blobId===attached.blob_id))return items;
+     const prefix=syntheticOnly?"SYN-EV-":"EV-";
+     const next=Math.max(0,...items.map(e=>Number(e.id.match(new RegExp("^"+prefix+"(\\d+)$"))?.[1]||0)))+1;
+     return [...items,{
+       id:prefix+String(next).padStart(4,"0"),title:attached.original_name,
+       kind:"medical",location:"",note:"Original source imported from Document evidence; pending human review.",
+       status:"pending",reviewer:"",blobId:attached.blob_id,
+       originalFilename:attached.original_name,sha256:attached.sha256,bytes:attached.bytes
+     }];
+   });
+   setView("evidence");
+   onEvidenceReceived?.();
+ // Applied exactly once per incoming source identifier.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[inboundEvidence?.sequence]);
  const [activeVault,setActiveVault]=useState<string|null>(null);
  const [autosaveState,setAutosaveState]=useState("Create or unlock an encrypted vault to enable autosave.");
  const [vaultMode,setVaultMode]=useState<"create"|"open">("open");
