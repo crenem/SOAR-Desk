@@ -21,6 +21,8 @@ export type SyntheticRecoveryEvent={
 };
 export type PackageInput={
   caseReference:string;
+  /** Legacy synthetic v1 or restricted encrypted local v2 case. Defaults to synthetic. */
+  syntheticOnly?:boolean;
   programs:Program[];
   includeDeferred:boolean;
   answers:Answers;
