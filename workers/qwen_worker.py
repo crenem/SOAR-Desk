@@ -57,8 +57,12 @@ def geniex_model():
 
 def response_text(result):
     """Require an actual assistant answer, not just HTTP 200 or a listed model."""
+    if not isinstance(result, dict):
+        raise ValueError("GenieX returned an invalid completion payload")
     choices = result.get("choices") or []
     first = choices[0] if choices else {}
+    if not isinstance(first, dict):
+        raise ValueError("GenieX returned an invalid completion choice")
     message = first.get("message") or {}
     text = message.get("content")
     if isinstance(text, str) and text.strip():
@@ -96,7 +100,7 @@ def geniex_completion(model, messages, *, max_tokens=650, temperature=0.2,
             if require_json:
                 parse_content(content)
             return result
-        except (ValueError, TimeoutError, urllib.error.URLError) as exc:
+        except ValueError as exc:
             failures.append(str(exc))
     raise ValueError(
         f"GenieX returned no usable assistant output after {attempts} attempt(s): "
