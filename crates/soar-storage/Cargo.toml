@@ -9,6 +9,9 @@ rust-version.workspace = true
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-
-[dev-dependencies]
 serde_json = "1"
+aes-gcm = "0.10.3"
+argon2 = "0.5.3"
+base64 = "0.22"
+zeroize = { version = "1.8", features = ["derive"] }
+
