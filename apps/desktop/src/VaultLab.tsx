@@ -33,7 +33,8 @@ function asCase(value:unknown):PackageInput{
    rows:v.rows as PackageInput["rows"],
    evidence:v.evidence as PackageInput["evidence"],
    submissions:v.submissions as PackageInput["submissions"],
-   recoveryEvents:Array.isArray(v.recovery_events)?v.recovery_events as PackageInput["recoveryEvents"]:[]
+   recoveryEvents:Array.isArray(v.recovery_events)?v.recovery_events as PackageInput["recoveryEvents"]:[],
+   signatures:Array.isArray(v.signatures)?v.signatures as PackageInput["signatures"]:[]
  };
 }
 export default function VaultLab({input,onRestore,onVaultReady,initialMode="create"}:Props){
@@ -73,7 +74,8 @@ export default function VaultLab({input,onRestore,onVaultReady,initialMode="crea
      rows:input.rows,
      evidence:input.evidence,
      submissions:input.submissions,
-     recovery_events:input.recoveryEvents??[]
+     recovery_events:input.recoveryEvents??[],
+     signatures:input.signatures??[]
    };
  }
  async function execute(){
