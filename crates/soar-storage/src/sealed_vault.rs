@@ -87,6 +87,7 @@ fn validate_passphrase(passphrase: &str) -> Result<(), VaultCryptoError> {
 }
 fn validate_vault_id(vault_id: &str) -> Result<(), VaultCryptoError> {
     if !vault_id.starts_with("SYN-")
+        || vault_id.len() <= 4
         || vault_id.len() > 80
         || !vault_id
             .bytes()
@@ -111,6 +112,10 @@ fn valid_case(data: &[u8]) -> Result<(), VaultCryptoError> {
         || !json.get("answers").is_some_and(|v| v.is_object())
         || !json.get("rows").is_some_and(|v| v.is_object())
         || !json.get("evidence").is_some_and(|v| v.is_array())
+        || !json.get("programs").is_some_and(|v| v.is_array())
+        || !json.get("submissions").is_some_and(|v| v.is_object())
+        || !json.pointer("/submissions/records").is_some_and(|v| v.is_array())
+        || !json.pointer("/submissions/events").is_some_and(|v| v.is_array())
     {
         return Err(VaultCryptoError::InvalidSyntheticPayload);
     }
@@ -435,5 +440,8 @@ mod tests {
         let mut data: serde_json::Value = serde_json::from_slice(&test_case()).unwrap();
         data["case_reference"] = serde_json::json!("REAL-JANE");
         assert!(seal_synthetic_case(data.to_string().as_bytes(), OP, ORG).is_err());
+        let mut data:serde_json::Value=serde_json::from_slice(&test_case()).unwrap();
+        data.as_object_mut().unwrap().remove("submissions");
+        assert!(seal_synthetic_case(data.to_string().as_bytes(),OP,ORG).is_err());
     }
 }
