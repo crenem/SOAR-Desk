@@ -38,6 +38,7 @@ function asCase(value:unknown):PackageInput{
 }
 export default function VaultLab({input,onRestore,onVaultReady,initialMode="create"}:Props){
  const [mode,setMode]=useState<Mode>(initialMode);
+ useEffect(()=>{setMode(initialMode);},[initialMode]);
  const [selected,setSelected]=useState("");
  const [practitioner,setPractitioner]=useState("");
  const [orgRecovery,setOrgRecovery]=useState("");
