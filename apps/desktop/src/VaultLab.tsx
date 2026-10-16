@@ -5,7 +5,7 @@ import type {PackageInput} from "./application-package";
 
 /** Development-only encrypted case snapshot; not production PHI storage. */
 type Mode="create"|"open"|"backup"|"recover";
-type Props={input:PackageInput;onRestore:(newCase:PackageInput)=>void};
+type Props={input:PackageInput;onRestore:(newCase:PackageInput)=>void;onVaultReady?:(path:string|null)=>void;initialMode?:Mode};
 type Saved={path:string;encrypted:boolean;synthetic_only:boolean;note:string};
 const fileFilters=[{name:"Encrypted SOAR training case",extensions:["soarvault","soarbackup"]}];
 const message=(e:unknown)=>e instanceof Error?e.message:String(e);
@@ -36,8 +36,8 @@ function asCase(value:unknown):PackageInput{
    recoveryEvents:Array.isArray(v.recovery_events)?v.recovery_events as PackageInput["recoveryEvents"]:[]
  };
 }
-export default function VaultLab({input,onRestore}:Props){
- const [mode,setMode]=useState<Mode>("create");
+export default function VaultLab({input,onRestore,onVaultReady,initialMode="create"}:Props){
+ const [mode,setMode]=useState<Mode>(initialMode);
  const [selected,setSelected]=useState("");
  const [practitioner,setPractitioner]=useState("");
  const [orgRecovery,setOrgRecovery]=useState("");
@@ -89,14 +89,18 @@ export default function VaultLab({input,onRestore}:Props){
          output_path:output,snapshot:snapshot(),practitioner_passphrase:practitioner,
          organization_recovery_passphrase:orgRecovery,synthetic_confirmed:true}});
        setSelected(result.path);
+       onVaultReady?.(result.path);
        setFeedback("Encrypted training case saved: "+result.path+". Keep both credentials separately; this is NOT production-grade case storage.");
      }else if(mode==="open"){
        if(!selected)throw Error("Select an encrypted vault or backup.");
        const restored=await invoke<unknown>("open_synthetic_vault",{request:{
          input_path:selected,practitioner_passphrase:practitioner,synthetic_confirmed:true}});
        const data=asCase(restored);
-       if(!window.confirm("Replace the current in-memory synthetic interview, evidence and submission history with "+data.caseReference+"?"))return;
+       if(!window.confirm("Replace the current in-memory synthetic interview, evidence and submission history with "+data.caseReference+"?")){
+         await invoke("lock_synthetic_autosave");return;
+       }
        onRestore(data);
+       onVaultReady?.(selected.endsWith(".soarvault")?selected:null);
        setFeedback("Decrypted and restored fictional case "+data.caseReference+" into this session. This is not a production case login.");
      }else if(mode==="backup"){
        if(!selected)throw Error("Select an encrypted source vault.");
@@ -121,6 +125,7 @@ export default function VaultLab({input,onRestore}:Props){
          new_practitioner_passphrase:nextPractitioner,
          new_organization_passphrase:nextRecovery,
          actor_code:actor,recovery_reason:reason,synthetic_confirmed:true}});
+       onVaultReady?.(null);
        setFeedback("Recovered and re-encrypted into "+result.path+". The old file must be separately retired; emergency audit is only embedded in the new synthetic file.");
      }
    }catch(e){setError(message(e));}
