@@ -7,8 +7,8 @@ Status: **interactive, in-memory, synthetic-only starter**. Created 2026-10-16. 
 - New **Application preparation** workspace is the default. Screening remains optional because the practitioner can screen applicants independently. Document evidence/Laya/Qwen is accessible from the sidebar.
 - Per-case practitioner choice: prepare SSI, SSDI, or both. This is a manual plan, **not** a determination about federal program eligibility or mandatory filing path.
 - Form inventory linked directly to unchanged SSA.gov templates, with version information and coverage notes.
-- In-memory question-by-question, source-numbered starter interview for **SSA-3368-BK**, **SSA-827**, **SSA-3369-BK**, **SSA-3373-BK**, and **SSA-8000-BK**.
-- Previously uploaded **SSA-16** and **SSA-8001-BK** remain inventoried as **reference only** until their full UI crosswalks are implemented. Abbreviated SSA-8001 is not selected as the default full SSI filing form.
+- In-memory question-by-question, source-numbered starter interview for **SSA-16**, **SSA-3368-BK**, **SSA-827**, **SSA-3369-BK**, **SSA-3373-BK**, and **SSA-8000-BK**.
+- The previously uploaded **SSA-16** now also has a guided initial interview covering numbered questions 1–24 and its applicant signature page. **SSA-8001-BK** remains inventoried as **reference only** until its nonstandard deferred/abbreviated workflow is designed. Abbreviated SSA-8001 is not selected as the default full SSI filing form.
 - Shared canonical keys (e.g., `person.name`, `person.ssn`, `work.onset`) allow one interview answer to populate corresponding *question views*. Form-specific questions remain independent.
 - Repeatable, editable synthetic rows for work history, medical conditions, treatment providers, medications, contacts, SSI resources and income; no records are fetched, inferred or silently completed.
 - Conditional question branches: e.g., SSI `transient or homeless` selection exposes a dedicated explanation while avoiding ordinary household questions; employment and signature details are similarly conditional.
@@ -25,7 +25,7 @@ Status: **interactive, in-memory, synthetic-only starter**. Created 2026-10-16. 
 | SSA-3369-BK | https://www.ssa.gov/forms/ssa-3369.pdf | 07-2026; 14 pages |
 | SSA-3373-BK | https://www.ssa.gov/forms/ssa-3373-bk.pdf | 10 pages; **inconsistent page header edition strings** in SSA's served PDF (10-2026 and 08-2026). Confirm which edition SSA wants before PDF field mapping/production output. |
 | SSA-8000-BK | https://www.ssa.gov/forms/ssa-8000-bk.pdf | 09-2024; 24 pages |
-| SSA-16 | https://www.ssa.gov/forms/ssa-16-bk.pdf | 09-2025; already inventoried, not yet a guided questionnaire |
+| SSA-16 | https://www.ssa.gov/forms/ssa-16-bk.pdf | 09-2025; guided starter with questions 1–24, not yet full structured continuations |
 | SSA-8001-BK | https://www.ssa.gov/forms/ssa-8001-bk.pdf | 07-2023; deferred/abbreviated alternate, not default |
 
 The internal `scripts/fetch-ssa-templates.sh` can optionally download unmodified official templates to a **gitignored local cache** and generate SHA-256 inventory. No SSA PDFs or filled application packages are committed. It is for development/reference only, not claimant submissions.
@@ -44,7 +44,7 @@ The internal `scripts/fetch-ssa-templates.sh` can optionally download unmodified
 
 ## Deliberately not yet implemented
 
-- Complete numbered and subpart-level crosswalks. **Only first-pass question coverage exists** for the five new forms. In particular, detailed SSI full application financial and household sub-branches, SSA-3369 each-job physical activity table, SSA-3368 all contacts/tests, SSA-3373 all individual activity checkboxes, and release witness legal scenarios still require full transcription/mapping.
+- Complete numbered and subpart-level crosswalks. **Only first-pass question coverage exists** for the five new forms and SSA-16. In particular, detailed SSI full application financial and household sub-branches, SSA-3369 each-job physical activity table, SSA-3368 all contacts/tests, SSA-3373 all individual activity checkboxes, and release witness legal scenarios still require full transcription/mapping.
 - Official PDF field names, XFA/AcroForm appearance population, complete synthetic render comparison, paper-form printing, electronically accepted signatures, and SSA-approved submission.
 - State persistence, access permissions, audit/change logs, encryption, legal consent capture, or retention policies. Never input real client information.
 - Claim filing, protective filing dates and confirmation: should only reflect an independently verified SSA acknowledgment. No automatic service denial/benefits eligibility.
@@ -52,7 +52,7 @@ The internal `scripts/fetch-ssa-templates.sh` can optionally download unmodified
 
 ## Next engineering tasks
 
-1. Parse and map every numbered/subpart question from each current SSA source (including SSA-16). Preserve edition and routing logic.
+1. Parse and map every numbered/subpart question from each current SSA source (including complete SSA-16 marriage and dependent appendices). Preserve edition and routing logic.
 2. Build per-form synthetic PDF field / visual template contracts; test XFA forms in official-reader paths before claiming populated forms work.
 3. Implement secure local data model and reviewer-provenance audit before allowing real PHI/PII.
 4. Integrate human-verified evidence and provider sources from document analysis; separate evidence claims from claimant testimony.
