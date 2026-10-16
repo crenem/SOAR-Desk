@@ -17,6 +17,10 @@ const headings: {category: MetadataCategory; pattern: RegExp}[] = [
 const fields: {category:MetadataCategory;field:string;pattern:RegExp}[] = [
  {category:"Patient",field:"Patient name",pattern:/^(?:patient(?: name)?|name)\s*:\s*(.+)$/i},
  {category:"Patient",field:"Date of birth",pattern:/^(?:date of birth|dob)\s*:\s*(.+)$/i},
+ {category:"Patient",field:"Social Security number",pattern:/^(?:social security (?:number|no\.?|#)|ssn)\s*:\s*(.+)$/i},
+ {category:"Patient",field:"Phone number",pattern:/^(?:phone(?: number)?|telephone|contact phone)\s*:\s*(.+)$/i},
+ {category:"Patient",field:"Height",pattern:/^height\s*:\s*(.+)$/i},
+ {category:"Patient",field:"Weight",pattern:/^weight\s*:\s*(.+)$/i},
  {category:"Patient",field:"Medical record number",pattern:/^(?:medical record (?:number|no\.?)|mrn)\s*:\s*(.+)$/i},
  {category:"Encounter",field:"Admission date",pattern:/^(?:admission date|admitted(?: on)?)\s*:\s*(.+)$/i},
  {category:"Encounter",field:"Discharge date",pattern:/^(?:discharge date|discharged(?: on)?)\s*:\s*(.+)$/i},
