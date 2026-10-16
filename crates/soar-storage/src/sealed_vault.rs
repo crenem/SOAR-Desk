@@ -248,7 +248,7 @@ fn decrypt_block(
     let ciphertext = STANDARD
         .decode(&block.ciphertext)
         .map_err(|_| VaultCryptoError::InvalidFormat)?;
-    if ciphertext.len() < 16 || ciphertext.len() > MAX_ENVELOPE_BYTES {
+    if ciphertext.len() < 16 || ciphertext.len() > MAX_DOCUMENT_ENVELOPE_BYTES {
         return Err(VaultCryptoError::InvalidFormat);
     }
     let plaintext = key_cipher(key)?
