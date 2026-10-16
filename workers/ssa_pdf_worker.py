@@ -6,6 +6,7 @@ SSA-only field may be generated. Explicit, source-verified AcroForm/XFA names.
 """
 from __future__ import annotations
 import json
+import hashlib
 import os
 import pathlib
 import sys
@@ -17,6 +18,8 @@ except ImportError as exc:
 
 FORM = "SSA-16"
 MARKER = "Form SSA-16 (09-2025)"
+# Same vetted ORIGINAL BLANK federal PDF accepted by the native template installer.
+EXPECTED_SHA256 = "09c088cbbf688b2e14a1061d2ff31cd481344de2ba5eacfac030f61045ba548e"
 TEXT = {
     "person.name":"N1FLD_FLD[0]",
     "person.ssn":"N2FLD_FLD[0]",
@@ -93,6 +96,8 @@ def render(template:pathlib.Path,output:pathlib.Path,package:dict)->dict:
     template=template.resolve(strict=True)
     if template.stat().st_size>25_000_000:
         raise ValueError("Template is too large")
+    if hashlib.sha256(template.read_bytes()).hexdigest()!=EXPECTED_SHA256:
+        raise ValueError("SSA-16 template does not match the reviewed original blank 09-2025 edition")
     if not output.is_absolute() or output.suffix.lower()!=".pdf":
         raise ValueError("An absolute .pdf export path is required")
     if output.resolve()==template:
