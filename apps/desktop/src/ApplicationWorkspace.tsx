@@ -8,6 +8,7 @@ import PackageExport from "./PackageExport";
 import VaultLab from "./VaultLab";
 import type {PrefillSuggestion} from "./document-prefill";
 import {kindFor,inputMask,normalizeOnBlur,validateDisplay} from "./field-format";
+import {formCoverage,type FormCoverage,type MissingTarget} from "./form-navigation";
 import type {EvidenceReference,PackageInput,SyntheticRecoveryEvent} from "./application-package";
 
 const emptyAnswer=():Response=>({value:"",status:"reported",source:""});
@@ -20,10 +21,10 @@ const statuses:{value:AnswerStatus;label:string}[]=[
 const display=(s:Response|undefined)=>s?.status==="unknown"?"Unknown":s?.value || "Not collected";
 const fieldsOf=(rows:Rows,key:string)=>rows[key]??[];
 type View="overview"|"interview"|"review"|"evidence"|"package"|"submissions"|"casefiles";
-type Props={onCaseChange?:(ref:string)=>void;prefill?:PrefillSuggestion[];onPrefillApplied?:()=>void};
+type Props={onCaseChange?:(ref:string)=>void;prefill?:PrefillSuggestion[];onPrefillApplied?:()=>void;onProgress?:(items:FormCoverage[])=>void;navigate?:{target:MissingTarget;token:number}|null};
 
 
-export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillApplied}:Props){
+export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillApplied,onProgress,navigate}:Props){
  const [programs,setPrograms]=useState<Program[]>(["ssi","ssdi"]);
  const [formId,setFormId]=useState<FormId>("SSA-3368-BK");
  const [section,setSection]=useState("identity");
@@ -44,6 +45,26 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
  const snapshotRef=useRef<PackageInput>({
    caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog,recoveryEvents
  });
+ const mappedCoverage=useMemo(()=>formCoverage(programs,includeDeferred,answers,rows),
+   [programs,includeDeferred,answers,rows]);
+ useEffect(()=>{onProgress?.(mappedCoverage)},[mappedCoverage,onProgress]);
+ useEffect(()=>{
+   if(!navigate)return;
+   const {target}=navigate;
+   setFormId(target.formId);
+   setSection(target.sectionId);
+   setView("interview");
+ },[navigate?.token]);
+ useEffect(()=>{
+   if(!navigate||view!=="interview"||formId!==navigate.target.formId||section!==navigate.target.sectionId)return;
+   const id=navigate.target.kind==="question"?"q-"+navigate.target.fieldId:"group-"+navigate.target.fieldId;
+   const handle=window.requestAnimationFrame(()=>{
+     const element=document.getElementById(id);
+     element?.scrollIntoView({block:"center",behavior:"smooth"});
+     if(element instanceof HTMLElement)element.focus({preventScroll:true});
+   });
+   return ()=>window.cancelAnimationFrame(handle);
+ },[navigate?.token,view,formId,section]);
  const currentSnapshot=useMemo<PackageInput>(()=>({
    caseReference:caseLabel,programs,includeDeferred,answers,rows,evidence,
    submissions:submissionLog,recoveryEvents
@@ -207,7 +228,7 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
  function renderQuestion(question:Section["questions"][number]){
   if(!applicable(question,answers))return null;
   const r=answers[question.key]??emptyAnswer();
-  return <div className="intake-question" key={question.key}>
+  return <div className="intake-question" key={question.key} data-field-anchor={question.key}>
    <div className="intake-label"><strong>{question.label}</strong><span>{question.ref}</span></div>
    <label className="intake-control" htmlFor={"q-"+question.key}>
     <span className="sr-only">{question.label}</span>
@@ -233,7 +254,7 @@ export default function ApplicationWorkspace({onCaseChange,prefill=[],onPrefillA
  function renderCollection(group:NonNullable<Section["collections"]>[number]){
   if(!applicable(group,answers))return null;
   const items=fieldsOf(rows,group.key);
-  return <fieldset key={group.key} className="intake-repeat">
+  return <fieldset key={group.key} id={"group-"+group.key} tabIndex={-1} className="intake-repeat">
    <legend>{group.title} <small>{group.ref}</small></legend>
    {group.hint&&<p className="hint">{group.hint}</p>}
    {items.length===0&&<p className="muted">No entries yet. Leaving this blank does not mean none.</p>}
