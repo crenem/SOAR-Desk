@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 pub mod recovery;
+pub mod sealed_vault;
 
 pub const SCHEMA_VERSION: u32 = 1;
 pub const INITIAL_SCHEMA: &str = include_str!("../migrations/0001_initial.sql");
