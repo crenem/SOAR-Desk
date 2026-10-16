@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { extractMetadata, type MetadataCandidate, type MetadataCategory } from "./metadata";
 import { reviewedSuggestions,type PrefillSuggestion } from "./document-prefill";
+import type {AttachedSource} from "./evidence-attachment";
 
 type Page = { page: number; text: string; method: string; warning: string | null };
 type Document = { document_id: string; sha256: string; pages: Page[] };
@@ -60,7 +61,7 @@ function summarise(parts: Segment[]) {
     functional:scored.length ? "Functional-evidence signals available for review; verify each against source passages." : "No reliable functional-evidence classification available.",
     status: parts.length && complete.length === parts.length && ordered.length > 0 ? "Ready for human review" : "Incomplete — review required"};
 }
-export default function Documents({caseReference,syntheticOnly,onPrefill}:{caseReference:string;syntheticOnly:boolean;onPrefill:(items:PrefillSuggestion[],caseReference:string)=>void}) {
+export default function Documents({caseReference,syntheticOnly,onPrefill,onEvidenceAttached}:{caseReference:string;syntheticOnly:boolean;onPrefill:(items:PrefillSuggestion[],caseReference:string)=>void;onEvidenceAttached:(source:AttachedSource,caseReference:string)=>void}) {
   const [confirmed,setConfirmed] = useState(false);
   const [path,setPath] = useState("");
   const [documentCase,setDocumentCase]=useState("");
@@ -129,6 +130,18 @@ export default function Documents({caseReference,syntheticOnly,onPrefill}:{caseR
     } catch(e) {if (generation.current === run) setError(String(e));}
     finally {if (generation.current === run) setBusy(false);}
   }
+  async function attachAnalyzedDocument(){
+    if(!document||!path||documentCase!==caseReference||busy)return;
+    setError("");setBusy(true);
+    try{
+      const attached=await invoke<AttachedSource>("attach_evidence_document",{request:{
+        source_path:path,case_reference:caseReference,expected_sha256:document.sha256,
+        synthetic_confirmed:syntheticOnly,local_risk_acknowledged:!syntheticOnly
+      }});
+      onEvidenceAttached(attached,caseReference);
+    }catch(e){setError("Encrypted attachment could not be created: "+String(e));}
+    finally{setBusy(false);}
+  }
   async function browse() {
     if (!confirmed || busy) return;
     setError("");
@@ -161,6 +174,11 @@ export default function Documents({caseReference,syntheticOnly,onPrefill}:{caseR
       <section className="review">
         <h2>Document-wide proposed assessment</h2>
         <p className="muted">Document {document.document_id} · {document.pages.length} pages · {segments.length} passages</p>
+        <div className="case-document-actions">
+          <button type="button" className="primary" disabled={busy||documentCase!==caseReference}
+             onClick={()=>void attachAnalyzedDocument()}>Attach original securely to this case →</button>
+          <p className="hint">Requires a writable unlocked case vault. The native backend encrypts the original and checks that its SHA-256 still matches this analyzed document. This action does not mark clinical interpretations verified.</p>
+        </div>
         <p><strong>Likely document type:</strong> {summary.category}</p>
         <p><strong>Processing:</strong> {summary.processed} of {summary.total} passages classified; {summary.failed} incomplete or failed.</p>
         <p><strong>Functional evidence:</strong> {summary.functional}</p>
