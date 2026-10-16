@@ -61,6 +61,38 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(backend, "cpu")
         self.assertIs(calls[0][1]["enable_think"], False)
 
+    def test_retry_a_transient_zero_token_geniex_completion(self):
+        blank = {"choices":[{"finish_reason":"stop","message":{"content":""}}],
+                 "usage":{"completion_tokens":0}}
+        valid = {"choices":[{"finish_reason":"stop",
+                              "message":{"content":'{"summary":"Fictional note.","findings":[]}'}}],
+                 "usage":{"completion_tokens":12}}
+        with patch.object(worker,"local_json",side_effect=[blank,valid]) as request:
+            result=worker.geniex_completion("synthetic-qwen",
+                [{"role":"user","content":"Synthetic testing only."}],
+                max_tokens=256,require_json=True)
+        self.assertEqual(worker.parse_content(worker.response_text(result))["summary"],"Fictional note.")
+        self.assertEqual(request.call_count,2)
+        self.assertTrue(all(call.args[0].startswith(worker.GENIEX_BASE)
+                            for call in request.call_args_list))
+
+    def test_persistent_zero_token_stop_is_not_marked_healthy(self):
+        blank={"choices":[{"finish_reason":"stop","message":{"content":""}}],
+               "usage":{"completion_tokens":0}}
+        with patch.object(worker,"local_json",return_value=blank) as request:
+            with self.assertRaisesRegex(ValueError,"completion_tokens=0"):
+                worker.geniex_completion("synthetic-qwen",
+                    [{"role":"user","content":"Fictional test."}],attempts=2)
+        self.assertEqual(request.call_count,2)
+
+    def test_geniex_retries_malformed_json_then_returns_valid_json(self):
+        invalid={"choices":[{"finish_reason":"stop","message":{"content":"Not JSON"}}]}
+        good={"choices":[{"finish_reason":"stop","message":{"content":'{"summary":"OK","findings":[]}'}}]}
+        with patch.object(worker,"local_json",side_effect=[invalid,good]):
+            result=worker.geniex_completion("synthetic-qwen",
+                [{"role":"user","content":"Fictional test."}],require_json=True)
+        self.assertEqual(worker.parse_content(worker.response_text(result))["summary"],"OK")
+
     def test_invalid_npu_json_does_not_claim_success(self):
         fake = {"choices": [{"message": {"content": "This is not JSON"}}]}
         with patch.dict(os.environ, {"SOAR_QWEN_BACKEND": "npu"}):
