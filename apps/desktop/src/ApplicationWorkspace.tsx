@@ -29,6 +29,31 @@ export default function ApplicationWorkspace(){
  const captured=total.reduce((n,x)=>n+x.p.captured,0);
  const possible=total.reduce((n,x)=>n+x.p.total,0);
  const sections=validCurrent?.sections??[];
+ function loadSyntheticExample(){
+  if(captured>0&&!window.confirm("Replace current in-memory synthetic interview answers with the fictional demonstration case?"))return;
+  const facts:Record<string,string>={
+    "person.name":"Jane Doe", "person.phone":"No reliable telephone; use alternate contact with permission",
+    "person.language":"English","work.current":"stopped","work.onset":"03/12/2024",
+    "work.stop":"03/12/2024","work.any":"yes","work.changed":"yes",
+    "medical.treated":"yes","medical.medicines":"yes",
+    "contacts.available":"no","function.where":"shelter",
+    "function.work":"Applicant reports back pain limiting prolonged standing; verify against the source record.",
+    "function.day":"Applicant reports needing breaks throughout the day; interview for specific daily activities.",
+    "ssi.month":"10/2026","living.type":"transient or homeless",
+    "living.homeless":"Fictional scenario: shelter stays and occasional nights without shelter; mailing arrangements need confirmation.",
+    "resources.date":"10/01/2026"
+  };
+  const next:Answers={};
+  for(const [key,value] of Object.entries(facts)){next[key]={value,status:"reported",source:"SYN-DEMO / fictitious applicant statement"};}
+  setAnswers(next);
+  setRows({
+    conditions:[{condition:"Lumbar radiculopathy (fictional clinical scenario)",details:"Unverified; do not infer disability.",_status:"reported"}],
+    providers:[{facility:"Example Community Clinic (fictional)",provider:"Not yet identified",conditions:"Back pain",_status:"reported"}],
+    jobs:[{title:"Stock clerk",business:"Retail",from:"04/2019",to:"03/2024",hours:"8",days:"5",tasks:"Stocked shelves and moved merchandise",impact:"Reports that standing and lifting became difficult",_status:"reported"}],
+    medicines:[{medicine:"Fictional medication — confirm with record",reason:"Pain management",_status:"reported"}]
+  });
+  setFormId("SSA-3368-BK");setSection("identity");setView("interview");setCaseLabel("SYN-JANE-DOE-001");
+ }
  function chooseProgram(p:Program){
    const next=programs.includes(p)?programs.filter(x=>x!==p):[...programs,p];
    if(!next.length)return;
@@ -115,6 +140,7 @@ export default function ApplicationWorkspace(){
      </div>
      <label className="checkline"><input type="checkbox" checked={includeDeferred} onChange={e=>setIncludeDeferred(e.target.checked)}/> Show SSA-8001 deferred/abbreviated SSI as a reference (not the default)</label>
      <p className="hint">Application pathways reflect your manual case planning, not an automated determination of eligibility or whether each form is required.</p>
+     <button type="button" className="secondary" onClick={loadSyntheticExample}>Load synthetic Jane Doe example</button>
    </div>
    <div className="intake-tabs" role="group" aria-label="Application views">
     {(["overview","interview","review"] as View[]).map(v=><button type="button" key={v} className={view===v?"active":""} onClick={()=>setView(v)}>{v==="overview"?"Form inventory":v==="interview"?"Guided interview":"Review gaps"}</button>)}
