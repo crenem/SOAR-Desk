@@ -72,6 +72,21 @@ class SsaPdfBindingTests(unittest.TestCase):
         obj["synthetic_only"]=False
         with self.assertRaises(ValueError): mapped_answers(obj)
 
+    def test_restricted_local_working_pdf_allowlist(self):
+        obj=sample()
+        obj["file_kind"]="soar-desk-local-application-draft"
+        obj["schema_version"]=2
+        obj["synthetic_only"]=False
+        obj["case_reference"]="CASE-12345678-abcd-ef12"
+        result=mapped_answers(obj)
+        self.assertEqual(result["person.name"],"Jane Q Doe")
+        self.assertNotIn("ssdi.signatureStatus",result)
+        self.assertNotIn("ssdi.depositDetails",result)
+        obj["case_reference"]="Jane-Doe-SSN-123456789"
+        with self.assertRaises(ValueError): mapped_answers(obj)
+        obj["file_kind"]="soar-desk-synthetic-application-draft"
+        with self.assertRaises(ValueError): mapped_answers(obj)
+
     def test_invalid_question_values_rejected(self):
         obj=sample()
         obj["forms"][0]["sections"][0]["questions"][1]["answer"]="TRUE"
