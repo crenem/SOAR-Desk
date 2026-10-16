@@ -60,7 +60,7 @@ function summarise(parts: Segment[]) {
     functional:scored.length ? "Functional-evidence signals available for review; verify each against source passages." : "No reliable functional-evidence classification available.",
     status: parts.length && complete.length === parts.length && ordered.length > 0 ? "Ready for human review" : "Incomplete — review required"};
 }
-export default function Documents({caseReference,onPrefill}:{caseReference:string;onPrefill:(items:PrefillSuggestion[],caseReference:string)=>void}) {
+export default function Documents({caseReference,syntheticOnly,onPrefill}:{caseReference:string;syntheticOnly:boolean;onPrefill:(items:PrefillSuggestion[],caseReference:string)=>void}) {
   const [confirmed,setConfirmed] = useState(false);
   const [path,setPath] = useState("");
   const [documentCase,setDocumentCase]=useState("");
@@ -81,7 +81,7 @@ export default function Documents({caseReference,onPrefill}:{caseReference:strin
     setPath(filePath);setDocumentCase(caseReference);setDocument(null);setSegments([]);setMetadata([]);setQwen([]);setError("");setReview("PendingHumanReview");setReviewer("");setRationale("");
     setBusy(true);setProgress("Extracting document text and performing OCR…");
     try {
-      const doc = await invoke<Document>("extract_synthetic_document",{request:{path:filePath,synthetic_confirmed:true}});
+      const doc = await invoke<Document>("extract_synthetic_document",{request:{path:filePath,synthetic_confirmed:syntheticOnly,local_risk_acknowledged:!syntheticOnly}});
       if (generation.current !== run) return;
       setDocument(doc);
       setMetadata(extractMetadata(doc.pages));
@@ -94,7 +94,7 @@ export default function Documents({caseReference,onPrefill}:{caseReference:strin
         if (generation.current !== run) return;
         setProgress(`Classifying passage ${i+1} of ${chunks.length} (page ${chunks[i].page})…`);
         try {
-          const result=await invoke<LayaResult>("classify_synthetic_text",{request:{text:chunks[i].text,synthetic_confirmed:true}});
+          const result=await invoke<LayaResult>("classify_synthetic_text",{request:{text:chunks[i].text,synthetic_confirmed:syntheticOnly,local_risk_acknowledged:!syntheticOnly}});
           output[i]={...chunks[i],result};
         } catch(e) {output[i]={...chunks[i],error:String(e)};}
         if (generation.current === run) setSegments([...output]);
@@ -124,7 +124,7 @@ export default function Documents({caseReference,onPrefill}:{caseReference:strin
     if (!confirmed || busy) return;
     setError("");
     try {
-      const selected=await open({multiple:false,directory:false,title:"Select a synthetic evidence document",
+      const selected=await open({multiple:false,directory:false,title:syntheticOnly?"Select a fictional evidence document":"Select a locally authorized evidence document",
         filters:[{name:"PDF and images",extensions:["pdf","png","jpg","jpeg","tif","tiff"]}]});
       if (typeof selected === "string") await ingest(selected);
     } catch(e) {setError("Unable to select document: "+String(e));}
@@ -139,10 +139,10 @@ export default function Documents({caseReference,onPrefill}:{caseReference:strin
   function updateMetadata(id:string, patch:Partial<MetadataCandidate>){setMetadata(items=>items.map(m=>m.id===id?{...m,...patch,status:patch.value!==undefined?"PendingHumanReview":(patch.status??m.status)}:m)); setReview("PendingHumanReview");}
   const readyToReview=!busy && !!document && segments.length>0 && review!=="PendingHumanReview" && !!reviewer.trim() && !!rationale.trim();
   return <section className="panel" aria-label="Document intake and evidence assessment">
-    <div className="eyebrow">DOCUMENT PROCESSING · SYNTHETIC TEST DATA ONLY</div>
+    <div className="eyebrow">{syntheticOnly?"DOCUMENT PROCESSING · SYNTHETIC TEST DATA ONLY":"RESTRICTED LOCAL DOCUMENT ANALYSIS · NOT DEPLOYMENT-APPROVED"}</div>
     <h1>Document intake and evidence review</h1>
-    <p className="intro">Select a fictional document. Text extraction, OCR where needed, passage classification and document-level synthesis run automatically. Results are proposals—not disability or service decisions.</p>
-    <label className="checkline"><input type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/>I confirm the selected document contains only fictional test data and no identifying patient records.</label>
+    <p className="intro">Select {syntheticOnly?"a fictional":"an organization-authorized local"} document. Text extraction, OCR, classification and source-grounded proposals run on this computer. Results are not disability determinations. Original document bytes and complete model analyses are not yet part of the encrypted case vault.</p>
+    <label className="checkline"><input type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/>{syntheticOnly?"I confirm the selected document contains only fictional test information.":"I am authorized by the nonprofit to process this document locally. I understand this development version has not completed a PHI/security review; its inference server receives content over local loopback and extracted text is held in application memory."}</label>
     <button type="button" className="primary" disabled={!confirmed||busy} onClick={browse}>Browse and analyze document…</button>
     {path && <p className="muted" style={{overflowWrap:"anywhere"}}><strong>Selected file:</strong> {path}</p>}
     {progress && <p role="status" aria-live="polite">{progress}</p>}
