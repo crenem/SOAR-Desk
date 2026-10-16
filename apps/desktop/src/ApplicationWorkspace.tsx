@@ -420,7 +420,7 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
     <p><strong>Current synthetic case:</strong> {caseLabel}</p>
     <p><strong>Applicant:</strong> {display(answers["person.name"])} · <strong>Onset:</strong> {display(answers["work.onset"])} · <strong>Reported living arrangement:</strong> {display(answers["living.type"])}</p>
    </section>}
-   {view==="evidence"&&<EvidenceRegister evidence={evidence} setEvidence={setEvidence} syntheticOnly={syntheticOnly}/>}
+   {view==="evidence"&&<EvidenceRegister evidence={evidence} setEvidence={setEvidence} syntheticOnly={syntheticOnly} caseReference={caseLabel}/>}
    {view==="signatures"&&<SignatureWorkbench formId={formId} caseReference={caseLabel} answers={answers} rows={rows} receipts={signatures} onChange={setSignatures}/>}
    {view==="package"&&<PackageExport input={currentSnapshot}/>}\n   {view==="casefiles"&&<VaultLab input={currentSnapshot} onRestore={restoreSyntheticCase} onVaultReady={vaultReady} initialMode={vaultMode}/>}
    <div hidden={view!=="submissions"}><SubmissionTracker log={submissionLog} setLog={setSubmissionLog} caseReference={caseLabel} programs={programs}/></div>
