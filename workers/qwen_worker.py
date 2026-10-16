@@ -55,6 +55,55 @@ def geniex_model():
     raise ValueError("GenieX is running, but the verified Qwen3 4B GGUF Q4_0 model was not listed")
 
 
+def response_text(result):
+    """Require an actual assistant answer, not just HTTP 200 or a listed model."""
+    choices = result.get("choices") or []
+    first = choices[0] if choices else {}
+    message = first.get("message") or {}
+    text = message.get("content")
+    if isinstance(text, str) and text.strip():
+        return text
+    finish = first.get("finish_reason", "no_choices")
+    usage = result.get("usage") or {}
+    reason = bool(message.get("reasoning_content"))
+    count = usage.get("completion_tokens", "unknown")
+    raise ValueError(
+        "No assistant text from GenieX "
+        f"(finish_reason={finish}, completion_tokens={count}, reasoning_only={reason})"
+    )
+
+
+def geniex_completion(model, messages, *, max_tokens=650, temperature=0.2,
+                      attempts=2, require_json=False):
+    """Retry an *empty* or malformed local model completion once.
+
+    This addresses transient initialization/readiness failures, not a server
+    that consistently returns zero completion tokens. Never report success
+    unless the assistant actually produces useful text.
+    """
+    failures = []
+    for attempt in range(attempts):
+        payload = {
+            "model": model, "stream": False,
+            "temperature": temperature if attempt == 0 else 0.6,
+            "max_tokens": max_tokens,
+            "enable_think": False,
+            "messages": messages,
+        }
+        try:
+            result = local_json(GENIEX_BASE + "/chat/completions", payload, timeout=120)
+            content = response_text(result)
+            if require_json:
+                parse_content(content)
+            return result
+        except (ValueError, TimeoutError, urllib.error.URLError) as exc:
+            failures.append(str(exc))
+    raise ValueError(
+        f"GenieX returned no usable assistant output after {attempts} attempt(s): "
+        + "; ".join(failures)
+    )
+
+
 def request_model(text):
     mode = os.environ.get("SOAR_QWEN_BACKEND", "auto").lower()
     if mode not in ("auto", "npu", "cpu"):
@@ -80,14 +129,20 @@ def request_model(text):
                 # Qualcomm's GenieX OpenAI endpoint supports disabling Qwen thinking.
                 # The extraction budget should go to source-linked JSON, not reasoning.
                 payload["enable_think"] = False
-            result = local_json(base + "/chat/completions", payload, timeout=180)
-            choices = result.get("choices") or []
-            message = choices[0].get("message") if choices else None
-            if not isinstance(message, dict) or not str(message.get("content") or "").strip():
-                reason = choices[0].get("finish_reason", "unknown") if choices else "no_choices"
-                raise ValueError(f"Empty model output (finish_reason={reason})")
-            # Reject unusable model responses before claiming successful inference.
-            parse_content(message["content"])
+            if backend == "npu":
+                # Only retries transient blank/malformed GenieX responses.
+                result = geniex_completion(
+                    model, payload["messages"], max_tokens=650,
+                    temperature=0.1, require_json=True
+                )
+            else:
+                result = local_json(base + "/chat/completions", payload, timeout=180)
+                choices = result.get("choices") or []
+                message = choices[0].get("message") if choices else None
+                if not isinstance(message, dict) or not str(message.get("content") or "").strip():
+                    reason = choices[0].get("finish_reason", "unknown") if choices else "no_choices"
+                    raise ValueError(f"Empty model output (finish_reason={reason})")
+                parse_content(message["content"])
             return result, backend, model
         except (urllib.error.URLError, TimeoutError, ValueError, KeyError) as exc:
             errors.append(backend + ": " + str(exc))
