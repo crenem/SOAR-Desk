@@ -232,11 +232,105 @@ fn extract_qwen_candidates(request: QwenRequest) -> Result<serde_json::Value, St
     Ok(parsed)
 }
 
+/// Explicit, bounded export of a synthetic-only application draft.
+#[derive(Deserialize)]
+struct SyntheticDraftRequest {
+    path: String,
+    content: String,
+    synthetic_confirmed: bool,
+}
+
+fn validate_draft_json(content: &str) -> Result<(), String> {
+    if content.is_empty() || content.len() > 2_000_000 {
+        return Err("Synthetic draft must be 1–2,000,000 bytes".into());
+    }
+    let json: serde_json::Value =
+        serde_json::from_str(content).map_err(|_| "Draft must contain valid JSON".to_string())?;
+    if json.get("file_kind").and_then(|v| v.as_str()) != Some("soar-desk-synthetic-application-draft")
+        || json.get("schema_version").and_then(|v| v.as_u64()) != Some(1)
+        || json.get("synthetic_only").and_then(|v| v.as_bool()) != Some(true)
+        || json.pointer("/summary/ready_for_ssa_submission").and_then(|v| v.as_bool()) != Some(false)
+    {
+        return Err("Not a versioned synthetic, non-submittable SOAR Desk draft".into());
+    }
+    let case = json.get("case_reference").and_then(|v| v.as_str()).unwrap_or("");
+    if case.len() > 80 || !case.starts_with("SYN-")
+        || !case.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err("Draft case reference must be explicitly synthetic".into());
+    }
+    if !json.get("forms").is_some_and(|v| v.is_array())
+        || !json.get("evidence_register").is_some_and(|v| v.is_array())
+        || !json.get("submission_log").is_some_and(|v| v.is_object())
+    {
+        return Err("Draft package is missing core sections".into());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn export_synthetic_draft(request: SyntheticDraftRequest) -> Result<String, String> {
+    use std::{fs::OpenOptions, io::Write, path::Path};
+    if !request.synthetic_confirmed {
+        return Err("Explicit fictional-data confirmation is required".into());
+    }
+    validate_draft_json(&request.content)?;
+    let target = Path::new(&request.path);
+    if !target.is_absolute() || target.extension().and_then(|e| e.to_str()) != Some("json") {
+        return Err("Select an absolute local JSON file destination".into());
+    }
+    // Deliberately no overwrites. Only a person invoking the save dialog chooses
+    // the destination; the command does not fetch, transmit, or automatically save.
+    let mut file = OpenOptions::new().write(true).create_new(true).open(target)
+        .map_err(|e| format!("Cannot create new draft file (existing files are never overwritten): {e}"))?;
+    if let Err(err) = file.write_all(request.content.as_bytes()).and_then(|_| file.sync_all()) {
+        drop(file);
+        let _ = std::fs::remove_file(target);
+        return Err(format!("Unable to finish the synthetic draft export: {err}"));
+    }
+    Ok(target.display().to_string())
+}
+
+#[cfg(test)]
+mod export_draft_tests {
+    use super::validate_draft_json;
+
+    fn draft() -> String {
+        serde_json::json!({
+            "file_kind":"soar-desk-synthetic-application-draft",
+            "schema_version":1,
+            "synthetic_only":true,
+            "case_reference":"SYN-JANE-001",
+            "summary":{"ready_for_ssa_submission":false},
+            "forms":[],
+            "evidence_register":[],
+            "submission_log":{"records":[],"events":[]}
+        }).to_string()
+    }
+
+    #[test]
+    fn accepts_only_explicit_synthetic_package() {
+        assert!(validate_draft_json(&draft()).is_ok());
+        let mut json:serde_json::Value=serde_json::from_str(&draft()).unwrap();
+        json["summary"]["ready_for_ssa_submission"]=serde_json::Value::Bool(true);
+        assert!(validate_draft_json(&json.to_string()).is_err());
+        json["summary"]["ready_for_ssa_submission"]=serde_json::Value::Bool(false);
+        json["case_reference"]=serde_json::Value::String("LIVE-001".to_string());
+        assert!(validate_draft_json(&json.to_string()).is_err());
+    }
+
+    #[test]
+    fn rejects_non_json_and_missing_fields() {
+        assert!(validate_draft_json("<xml/>").is_err());
+        assert!(validate_draft_json("{}").is_err());
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text, extract_qwen_candidates])
+        .invoke_handler(tauri::generate_handler![evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text, extract_qwen_candidates, export_synthetic_draft])
         .run(tauri::generate_context!())
         .expect("error starting SOAR Desk");
 }
