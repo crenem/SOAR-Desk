@@ -82,3 +82,20 @@
 .vault-lab .checkline{margin:20px 0 16px;line-height:1.55}
 .vault-source{padding:12px;border:1px solid #c4d8e1;background:#fff;border-radius:8px;margin:13px 0}
 .vault-source .hint{overflow-wrap:anywhere;margin:0 0 9px}
+
+
+/* Persistent case commands and autosave status must be visible without visiting export. */
+.case-file-toolbar{border:1px solid #b7d3df;border-radius:12px;padding:17px;background:#f4f9fb;margin:14px 0 22px}
+.case-file-actions{display:flex;flex-wrap:wrap;gap:10px}
+.autosave-indicator{display:flex;align-items:center;flex-wrap:wrap;gap:8px 15px;font-size:12px;color:#255369;margin-top:14px}
+.autosave-indicator span{overflow-wrap:anywhere;flex:1;min-width:160px}
+.autosave-indicator strong{white-space:nowrap}
+.prefill-review{border-color:#aacbd8}
+.prefill-review .checkline{margin:10px 0}
+.prefill-review .checkline span{display:flex;flex-direction:column;gap:4px}
+.prefill-review .checkline small{color:#526d7b}
+.prefill-review button{margin:10px 8px 0 0}
+.formatted-field{display:flex;flex-direction:column;gap:6px}
+.formatted-field input[aria-invalid="true"]{border-color:#ac6039}
+.field-warning{color:#8c472e;font-size:11px;line-height:1.4}
+@media(max-width:680px){.case-file-actions{flex-direction:column}.case-file-actions button{width:100%}}
