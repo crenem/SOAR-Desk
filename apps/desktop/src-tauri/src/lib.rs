@@ -326,11 +326,93 @@ mod export_draft_tests {
     }
 }
 
+/// Populate a local review copy of the original SSA-16 with synthetic fields.
+/// No network, signatures, SSA receipts, arbitrary document paths or overwrite.
+#[derive(Deserialize)]
+struct SyntheticPdfRequest {
+    output_path: String,
+    package: serde_json::Value,
+    synthetic_confirmed: bool,
+}
+#[tauri::command]
+fn export_synthetic_ssa16_pdf(request: SyntheticPdfRequest) -> Result<serde_json::Value, String> {
+    use std::{
+        io::Write,
+        path::{Path, PathBuf},
+        process::{Command, Stdio},
+    };
+    if !request.synthetic_confirmed {
+        return Err("Confirm fictional training data before exporting a PDF.".into());
+    }
+    if request.package.get("synthetic_only").and_then(|v| v.as_bool()) != Some(true)
+        || request
+            .package
+            .pointer("/summary/ready_for_ssa_submission")
+            .and_then(|v| v.as_bool())
+            != Some(false)
+    {
+        return Err("This export accepts only non-submittable synthetic drafts.".into());
+    }
+    let output = Path::new(&request.output_path);
+    if !output.is_absolute() || output.extension().and_then(|e| e.to_str()) != Some("pdf") {
+        return Err("Choose an absolute .pdf output destination.".into());
+    }
+    if output.exists() {
+        return Err("Existing PDF files cannot be overwritten; choose a new name.".into());
+    }
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let source = root.join(".local/ssa-templates/ssa-16-bk.pdf");
+    if !source.is_file() {
+        return Err(
+            "Official SSA-16 template not cached. Run: bash scripts/prepare-ssa16-template.sh"
+                .into(),
+        );
+    }
+    let python = root.join(".venv-laya/bin/python");
+    if !python.exists() {
+        return Err("Local Python environment unavailable. Relaunch SOAR Desk.".into());
+    }
+    let worker = root.join("workers/ssa_pdf_worker.py");
+    let mut child = Command::new(python)
+        .arg(worker)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env("PYTHONDONTWRITEBYTECODE", "1")
+        .spawn()
+        .map_err(|e| format!("Could not start the local PDF worker: {e}"))?;
+    let payload = serde_json::json!({
+        "output_path": request.output_path,
+        "template_path": source,
+        "synthetic_confirmed": true,
+        "package": request.package,
+    });
+    if payload.to_string().len() > 2_000_000 {
+        return Err("Synthetic PDF payload exceeds the 2 MB limit.".into());
+    }
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(payload.to_string().as_bytes())
+            .map_err(|e| format!("Cannot send synthetic data to local PDF worker: {e}"))?;
+    }
+    let response = child.wait_with_output().map_err(|e| e.to_string())?;
+    if !response.status.success() {
+        let details = String::from_utf8_lossy(&response.stderr);
+        return Err(format!("PDF review copy could not be generated: {}", details.trim()));
+    }
+    let result: serde_json::Value = serde_json::from_slice(&response.stdout)
+        .map_err(|e| format!("Invalid PDF worker response: {e}"))?;
+    if result.get("ready_for_ssa_submission").and_then(|v| v.as_bool()) != Some(false) {
+        return Err("PDF worker must never claim SSA submission readiness.".into());
+    }
+    Ok(result)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text, extract_qwen_candidates, export_synthetic_draft])
+        .invoke_handler(tauri::generate_handler![evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text, extract_qwen_candidates, export_synthetic_draft, export_synthetic_ssa16_pdf])
         .run(tauri::generate_context!())
         .expect("error starting SOAR Desk");
 }
