@@ -72,3 +72,13 @@
 .draft-ack{margin:22px 0;padding:16px;background:#f5f9fa;border:1px solid #cbdbe3;border-radius:9px;line-height:1.6}
 .draft-ack input{flex-shrink:0}
 @media(max-width:650px){.draft-form-line{flex-direction:column}.draft-form-line span{text-align:left}}
+
+
+/* Experimental synthetic encrypted case vault — do not imply production PHI security */
+.vault-lab{border:1px solid #cbdde5;border-radius:12px;margin:30px 0 20px;padding:20px;background:#f8fbfc}
+.vault-lab .intake-tabs{margin:12px 0 17px}
+.vault-lab label:not(.checkline){display:block;margin:13px 0;font-size:13px;font-weight:600;color:#213d4d}
+.vault-lab label:not(.checkline)>input,.vault-lab label:not(.checkline)>textarea{display:block;margin-top:7px;width:100%}
+.vault-lab .checkline{margin:20px 0 16px;line-height:1.55}
+.vault-source{padding:12px;border:1px solid #c4d8e1;background:#fff;border-radius:8px;margin:13px 0}
+.vault-source .hint{overflow-wrap:anywhere;margin:0 0 9px}
