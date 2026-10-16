@@ -2,10 +2,9 @@ import { useEffect,useMemo,useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open,save } from "@tauri-apps/plugin-dialog";
 import { buildDraftPackage,type PackageInput } from "./application-package";
-import VaultLab from "./VaultLab";
 
-type Props={input:PackageInput;onRestore:(input:PackageInput)=>void};
-export default function PackageExport({input,onRestore}:Props){
+type Props={input:PackageInput};
+export default function PackageExport({input}:Props){
  const [acknowledged,setAcknowledged]=useState(false);
  const [busy,setBusy]=useState(false);
  const [pdfBusy,setPdfBusy]=useState(false);
@@ -142,7 +141,6 @@ export default function PackageExport({input,onRestore}:Props){
     {pdfResult&&<p className="success" role="status">{pdfResult}</p>}
     {pdfError&&<p className="error" role="alert">{pdfError}</p>}
   </div>
-  <VaultLab input={input} onRestore={onRestore}/>
   {result&&<p className="success" role="status">{result}</p>}
   {error&&<p className="error" role="alert">{error}</p>}
   <p className="hint">You choose the local file path. The exporter refuses to overwrite existing files. The JSON is not encrypted: never use it with real applicant information. Nothing is sent to SSA or an external service.</p>
