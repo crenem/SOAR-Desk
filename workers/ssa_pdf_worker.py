@@ -11,6 +11,7 @@ import os
 import pathlib
 import sys
 import tempfile
+import re
 try:
     import fitz
 except ImportError as exc:
@@ -75,7 +76,7 @@ def mapped_answers(package:dict)->dict[str,str]:
     ref=package.get("case_reference")
     if not isinstance(ref,str) or len(ref)>80 or not (
         ref.startswith("SYN-") if training else
-        ref.startswith("CASE-") and len(ref)>=16
+        re.fullmatch(r"CASE-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}",ref) is not None
     ):
         raise ValueError("Opaque case identifier with matching mode required")
     if package.get("summary",{}).get("ready_for_ssa_submission") is not False:
