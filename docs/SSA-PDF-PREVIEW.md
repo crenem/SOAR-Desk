@@ -66,7 +66,18 @@ That downloads the unmodified SSA PDF from SSA, validates the observed edition, 
 .local/ssa-templates/ssa-3368-widgets.json
 ```
 
-The SSA-3368 export button is intentionally **disabled** until the original field names, positions, checkbox on-states and skip logic are inspected, mapped and visually verified. It is not equivalent to the already functioning SSA-16 preview.
+The SSA-3368 export button is intentionally **disabled** until the original field names, positions, checkbox on-states and skip logic are inspected, mapped and visually verified.
+
+The preparation script now also builds a **question-to-widget review workbench**, without auto-approving any guessed matches:
+
+```text
+.local/ssa-templates/ssa3368-workbench/ssa3368-mapping-review.json
+.local/ssa-templates/ssa3368-workbench/ssa3368-widgets-p03.png
+.local/ssa-templates/ssa3368-workbench/ssa3368-widgets-p04.png
+...
+```
+
+Its source SHA-256, visible source question cues, exact widget names, page coordinates, candidate proximity scores and checkbox states are recorded for human verification. **A suggested widget never counts as an approved binding.** This is necessary because the development environment cannot retrieve the original SSA-3368 PDF bytes for independent widget-level verification. To finish the PDF population, attach the downloaded official SSA-3368 PDF here (blank, no claimant information), or provide the generated workbench review and source file. The tool works locally without exposing any client information. It is not equivalent to the already functioning SSA-16 preview.
 
 ## Controls and limitations
 
