@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synthetic-only SSA-16 PDF review copy. Original PDF remains untouched.
+"""SSA-16 PDF review copy (training or unsigned local working draft). Original untouched.
 
 Requires PyMuPDF. No model inference, network call, signature, receipt, or
 SSA-only field may be generated. Explicit, source-verified AcroForm/XFA names.
@@ -62,13 +62,22 @@ CHOICES = {"ssdi.before22":{"yes":"N24yes_CB[0]","no":"N24no_CB[0]","unknown":"N
 # ambiguous compound questions until individually reviewed.
 
 def mapped_answers(package:dict)->dict[str,str]:
-    if not isinstance(package,dict) or package.get("file_kind")!="soar-desk-synthetic-application-draft":
-        raise ValueError("SOAR Desk draft required")
-    if package.get("schema_version")!=1 or package.get("synthetic_only") is not True:
-        raise ValueError("Versioned synthetic draft required")
+    if not isinstance(package,dict):
+        raise ValueError("SOAR Desk review draft required")
+    training=package.get("synthetic_only") is True
+    local=package.get("synthetic_only") is False
+    kind=package.get("file_kind")
+    if not (
+        (training and kind=="soar-desk-synthetic-application-draft" and package.get("schema_version")==1)
+        or (local and kind=="soar-desk-local-application-draft" and package.get("schema_version")==2)
+    ):
+        raise ValueError("Supported versioned working draft required")
     ref=package.get("case_reference")
-    if not isinstance(ref,str) or not ref.startswith("SYN-") or len(ref)>80:
-        raise ValueError("Synthetic case reference required")
+    if not isinstance(ref,str) or len(ref)>80 or not (
+        ref.startswith("SYN-") if training else
+        ref.startswith("CASE-") and len(ref)>=16
+    ):
+        raise ValueError("Opaque case identifier with matching mode required")
     if package.get("summary",{}).get("ready_for_ssa_submission") is not False:
         raise ValueError("Cannot render a package claiming submission readiness")
     forms=[f for f in package.get("forms",[]) if f.get("form_id")==FORM]
@@ -141,13 +150,17 @@ def render(template:pathlib.Path,output:pathlib.Path,package:dict)->dict:
                 widget.field_value=states[0]
                 expected[key]=states[0]
             widget.update()
+        training=package.get("synthetic_only") is True
+        watermark=("SYNTHETIC TRAINING DRAFT" if training
+                   else "UNSIGNED - INCOMPLETE WORKING DRAFT")
+        footer=("SOAR DESK TRAINING ONLY - NOT FOR SSA SUBMISSION" if training
+                else "UNSIGNED WORKING DRAFT - REVIEW ALL ANSWERS, COMPLETE GAPS AND SIGN")
         for page in pages:
-            page.insert_textbox(fitz.Rect(60,320,page.rect.width-40,560),
-                "SYNTHETIC TRAINING DRAFT",fontsize=26,fontname="helv",
-                color=(.75,.05,.05),fill_opacity=.16,align=1,overlay=True)
+            page.insert_textbox(fitz.Rect(35,300,page.rect.width-25,575),
+                watermark,fontsize=18 if not training else 26,fontname="helv",
+                color=(.75,.05,.05),fill_opacity=.12,align=1,overlay=True)
             page.insert_text((42,page.rect.height-4),
-                "SOAR DESK TRAINING ONLY - NOT FOR SSA SUBMISSION",
-                fontsize=7,fontname="helv",color=(.7,.08,.08),overlay=True)
+                footer,fontsize=6.5,fontname="helv",color=(.7,.08,.08),overlay=True)
         if not output.parent.is_dir():
             raise ValueError("Export destination folder does not exist")
         with tempfile.NamedTemporaryFile(prefix=".soar-ssa16-",suffix=".pdf",
@@ -176,7 +189,7 @@ def render(template:pathlib.Path,output:pathlib.Path,package:dict)->dict:
     finally:
         doc.close()
     return {"output":str(output),"form_id":FORM,"fields_populated":len(answers),
-            "original_pages_preserved":7,"synthetic_only":True,
+            "original_pages_preserved":7,"synthetic_only":package.get("synthetic_only"),
             "ready_for_ssa_submission":False}
 
 def main()->None:
@@ -184,8 +197,15 @@ def main()->None:
     if len(data)>2_000_000:
         raise ValueError("Synthetic PDF request exceeds 2 MB")
     request=json.loads(data)
-    if request.get("synthetic_confirmed") is not True:
-        raise ValueError("Explicit fictional-data acknowledgment required")
+    training=request.get("package",{}).get("synthetic_only") is True
+    if training:
+        if request.get("synthetic_confirmed") is not True or request.get("local_risk_acknowledged") is True:
+            raise ValueError("Explicit fictional-data acknowledgment required")
+    elif request.get("package",{}).get("synthetic_only") is False:
+        if request.get("local_risk_acknowledged") is not True or request.get("synthetic_confirmed") is True:
+            raise ValueError("Restricted local case PDF export requires explicit authorization acknowledgment")
+    else:
+        raise ValueError("Unknown case mode")
     response=render(pathlib.Path(request["template_path"]),
                     pathlib.Path(request["output_path"]),request["package"])
     print(json.dumps(response))
