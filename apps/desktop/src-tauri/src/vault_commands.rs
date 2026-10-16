@@ -371,6 +371,70 @@ pub fn open_synthetic_vault(
     begin_autosave(&request.input_path, &sealed, &passphrase)?;
     Ok(value)
 }
+fn list_opaque_blobs(vault:&Path)->Result<Vec<(String,PathBuf)>,String>{
+    let folder=blob_folder(vault);
+    if !folder.exists(){return Ok(vec![])}
+    let meta=fs::symlink_metadata(&folder).map_err(|_|"Cannot inspect encrypted evidence folder.".to_string())?;
+    if !meta.file_type().is_dir(){return Err("Evidence storage path is not a folder.".into())}
+    let mut blobs=vec![];
+    for entry in fs::read_dir(&folder).map_err(|_|"Cannot enumerate case attachments.".to_string())?{
+        let entry=entry.map_err(|_|"Cannot enumerate case attachments.".to_string())?;
+        let path=entry.path();
+        let m=fs::symlink_metadata(&path).map_err(|_|"Cannot inspect source attachment.".to_string())?;
+        if !m.file_type().is_file()||m.len()>MAX_DOCUMENT_ENVELOPE_BYTES as u64{
+            return Err("Invalid attachment file in encrypted folder.".into());
+        }
+        let name=path.file_name().and_then(|v|v.to_str()).ok_or("Invalid attachment filename.")?;
+        let id=name.strip_suffix(".soarblob").ok_or("Unexpected file in encrypted attachment folder.")?;
+        blob_path(vault,id)?;
+        blobs.push((id.into(),path));
+    }
+    Ok(blobs)
+}
+fn copy_blob_folder_for_backup(src:&Path,dest:&Path)->Result<(),String>{
+    let files=list_opaque_blobs(src)?;
+    if files.is_empty(){return Ok(())}
+    let folder=blob_folder(dest);
+    if folder.exists(){return Err("Backup attachment destination already exists.".into())}
+    fs::create_dir(&folder).map_err(|_|"Cannot create encrypted backup attachment folder.".to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _=fs::set_permissions(&folder,fs::Permissions::from_mode(0o700));
+    }
+    for (id,path) in files{
+        let ciphertext=fs::read(path).map_err(|_|"Cannot read encrypted backup attachment.".to_string())?;
+        let target=blob_path(dest,&id)?;
+        new_encrypted_file(&target.display().to_string(),"soarblob",&ciphertext)?;
+    }
+    Ok(())
+}
+fn reencrypt_blobs_for_recovery(
+    original_path:&Path,recovered_path:&Path,
+    original_vault:&[u8],new_vault:&[u8],
+    old_org_secret:&str,new_practitioner_secret:&str
+)->Result<(),String>{
+    let files=list_opaque_blobs(original_path)?;
+    if files.is_empty(){return Ok(())}
+    let folder=blob_folder(recovered_path);
+    if folder.exists(){return Err("Recovery attachment destination already exists.".into())}
+    fs::create_dir(&folder).map_err(|_|"Cannot create recovered evidence folder.".to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _=fs::set_permissions(&folder,fs::Permissions::from_mode(0o700));
+    }
+    for (id,path) in files {
+        let original_blob=fs::read(&path).map_err(|_|"Cannot read original encrypted evidence.".to_string())?;
+        let (rekeyed_id,rekeyed)=error_message(reencrypt_document_for_recovery(
+           original_vault,old_org_secret,new_vault,new_practitioner_secret,&original_blob))?;
+        if id!=rekeyed_id{return Err("Evidence blob ID mismatch during rekey.".into())}
+        let target=blob_path(recovered_path,&id)?;
+        new_encrypted_file(&target.display().to_string(),"soarblob",&rekeyed)?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn backup_synthetic_vault(
     request: BackupSyntheticVaultRequest,
@@ -379,12 +443,26 @@ pub fn backup_synthetic_vault(
     let sealed = read_encrypted(&request.input_path)?;
     let synthetic=validate_sealed_access(&sealed,request.synthetic_confirmed,request.local_risk_acknowledged)?;
     error_message(authenticate_backup(&sealed, &passphrase))?;
-    let path = new_encrypted_file(&request.output_path, "soarbackup", &sealed)?;
+    let output=filename_target(&request.output_path,&["soarbackup"])?;
+    if output.exists()||blob_folder(&output).exists(){
+        return Err("Backup destination must not exist.".into());
+    }
+    if let Err(error)=copy_blob_folder_for_backup(Path::new(&request.input_path),&output){
+        let _=fs::remove_dir_all(blob_folder(&output));
+        return Err(error);
+    }
+    let path=match new_encrypted_file(&request.output_path,"soarbackup",&sealed){
+        Ok(path)=>path,
+        Err(error)=>{
+            let _=fs::remove_dir_all(blob_folder(&output));
+            return Err(error);
+        }
+    };
     Ok(SealedFileResult {
         path,
         encrypted: true,
         synthetic_only: synthetic,
-        note: "Exact authenticated ciphertext copy; no attachments or production restore policy".into(),
+        note: "Exact encrypted case snapshot and accompanying encrypted evidence blobs, if any; restore must include both files and the .blobs folder.".into(),
     })
 }
 #[tauri::command]
@@ -400,9 +478,25 @@ pub fn recover_synthetic_vault(
         &original, &old_recovery, &next_practitioner, &next_recovery,
         &request.actor_code, &request.recovery_reason,
     ))?;
-    let path = new_encrypted_file(&request.output_path, "soarvault", &encrypted)?;
-    // Recovery custodian must not gain normal editing access. The replacement
-    // practitioner must explicitly open the recovered vault.
+    let output=filename_target(&request.output_path,&["soarvault"])?;
+    if output.exists()||blob_folder(&output).exists(){
+        return Err("Recovered case destination or document folder already exists.".into());
+    }
+    if let Err(error)=reencrypt_blobs_for_recovery(
+        Path::new(&request.input_path),&output,&original,&encrypted,
+        &old_recovery,&next_practitioner
+    ){
+        let _=fs::remove_dir_all(blob_folder(&output));
+        return Err(error);
+    }
+    let path=match new_encrypted_file(&request.output_path,"soarvault",&encrypted){
+        Ok(path)=>path,
+        Err(error)=>{
+            let _=fs::remove_dir_all(blob_folder(&output));
+            return Err(error);
+        }
+    };
+    // Recovery custodian never enters the normal editing session.
     lock_synthetic_autosave()?;
     Ok(SealedFileResult {
         path,
