@@ -1,4 +1,4 @@
-/** Human-confirmed import proposals from a single fictional source document.
+/** Human-confirmed import proposals from a source document reviewed in an explicitly selected local case.
  * Never infer unlabelled facts or overwrite an existing application answer. */
 import type {MetadataCandidate} from "./metadata";
 import {kindFor,normalizeOnBlur,validateDisplay} from "./field-format";
@@ -17,7 +17,7 @@ const FIELDS:Record<string,{key:string;label:string}>={
 export function reviewedSuggestions(
  metadata:MetadataCandidate[],sha256:string,caseReference:string
 ):PrefillSuggestion[]{
- if(!/^SYN-[A-Za-z0-9_-]{1,76}$/.test(caseReference)||!/^[0-9a-f]{64}$/i.test(sha256))return [];
+ if(!/^(?:SYN-[A-Za-z0-9_-]{1,76}|CASE-[A-Za-z0-9_-]{11,75})$/.test(caseReference)||!/^[0-9a-f]{64}$/i.test(sha256))return [];
  const found=new Map<string,PrefillSuggestion>();
  const conflicted=new Set<string>();
  for(const item of metadata){
