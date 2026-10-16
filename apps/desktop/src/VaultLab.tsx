@@ -16,7 +16,7 @@ function asCase(value:unknown):PackageInput{
  const local=v.file_kind==="soar-desk-local-case-snapshot"&&v.schema_version===2&&v.synthetic_only===false;
  if(!training&&!local)throw Error("Not a supported encrypted case snapshot.");
  if(typeof v.case_reference!=="string"||
-   !(training?/^SYN-[A-Za-z0-9_-]{1,76}$/:/^CASE-[A-Za-z0-9_-]{11,75}$/).test(v.case_reference))
+   !(training?/^SYN-[A-Za-z0-9_-]{1,76}$/:/^CASE-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i).test(v.case_reference))
    throw Error("Unsafe case reference.");
  if(!Array.isArray(v.programs)||!v.programs.length||v.programs.some(p=>p!=="ssi"&&p!=="ssdi"))
    throw Error("Invalid program selections.");
