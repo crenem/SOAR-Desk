@@ -19,3 +19,5 @@
 /dist/
 /src-tauri/target/
 .DS_Store
+# Local copies of official SSA templates (downloaded manually; never commit)
+.local/ssa-templates/
