@@ -63,6 +63,7 @@ function summarise(parts: Segment[]) {
 export default function Documents({caseReference,onPrefill}:{caseReference:string;onPrefill:(items:PrefillSuggestion[],caseReference:string)=>void}) {
   const [confirmed,setConfirmed] = useState(false);
   const [path,setPath] = useState("");
+  const [documentCase,setDocumentCase]=useState("");
   const [document,setDocument] = useState<Document | null>(null);
   const [segments,setSegments] = useState<Segment[]>([]);
   const [metadata,setMetadata] = useState<MetadataCandidate[]>([]);
@@ -77,7 +78,7 @@ export default function Documents({caseReference,onPrefill}:{caseReference:strin
 
   async function ingest(filePath:string) {
     const run = ++generation.current;
-    setPath(filePath);setDocument(null);setSegments([]);setMetadata([]);setQwen([]);setError("");setReview("PendingHumanReview");setReviewer("");setRationale("");
+    setPath(filePath);setDocumentCase(caseReference);setDocument(null);setSegments([]);setMetadata([]);setQwen([]);setError("");setReview("PendingHumanReview");setReviewer("");setRationale("");
     setBusy(true);setProgress("Extracting document text and performing OCR…");
     try {
       const doc = await invoke<Document>("extract_synthetic_document",{request:{path:filePath,synthetic_confirmed:true}});
@@ -134,7 +135,7 @@ export default function Documents({caseReference,onPrefill}:{caseReference:strin
   const qwenFailures=qwen.filter(s=>s.error).length;
   const metadataGroups: MetadataCategory[] = ["Document","Patient","Encounter","Diagnoses","Medical history","Psychiatric history","Medications","Allergies","Functional evidence"];
   const verifiedMetadata = metadata.filter(m=>m.status==="HumanVerified").length;
-  const fillCandidates = document ? reviewedSuggestions(metadata,document.sha256,caseReference) : [];
+  const fillCandidates = document && documentCase===caseReference ? reviewedSuggestions(metadata,document.sha256,documentCase) : [];
   function updateMetadata(id:string, patch:Partial<MetadataCandidate>){setMetadata(items=>items.map(m=>m.id===id?{...m,...patch,status:patch.value!==undefined?"PendingHumanReview":(patch.status??m.status)}:m)); setReview("PendingHumanReview");}
   const readyToReview=!busy && !!document && segments.length>0 && review!=="PendingHumanReview" && !!reviewer.trim() && !!rationale.trim();
   return <section className="panel" aria-label="Document intake and evidence assessment">
@@ -198,9 +199,10 @@ export default function Documents({caseReference,onPrefill}:{caseReference:strin
         <div className="review">
           <h3>Prefill application fields</h3>
           <p className="muted">After verifying individual labeled values against the original document, send them to the application as suggestions. This does not automatically overwrite the interview or treat model output as fact. Conflicting values within the same document are excluded.</p>
+          {documentCase!==caseReference&&<p className="error">This document was ingested for {documentCase}. Switch back to that case or ingest it again; its fields will not be applied to another case.</p>}
           <p><strong>{fillCandidates.length}</strong> verified, eligible applicant fields</p>
           <button type="button" className="primary" disabled={busy||fillCandidates.length===0}
-             onClick={()=>onPrefill(fillCandidates,caseReference)}>Review {fillCandidates.length} suggestions in Application Preparation →</button>
+             onClick={()=>onPrefill(fillCandidates,documentCase)}>Review {fillCandidates.length} suggestions in Application Preparation →</button>
         </div>
         <p className="muted">Clinical fields are candidate text excerpts, not normalized diagnoses or verified ICD-10 codes. Values and review selections are in memory only.</p>
       </section>
