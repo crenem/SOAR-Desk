@@ -422,11 +422,7 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
    </section>}
    {view==="evidence"&&<EvidenceRegister evidence={evidence} setEvidence={setEvidence} syntheticOnly={syntheticOnly}/>}
    {view==="signatures"&&<SignatureWorkbench formId={formId} caseReference={caseLabel} answers={answers} rows={rows} receipts={signatures} onChange={setSignatures}/>}
-   {view==="package"&&(syntheticOnly?<PackageExport input={{caseReference:caseLabel,syntheticOnly,programs,includeDeferred,answers,rows,evidence,submissions:submissionLog,recoveryEvents,signatures}}/>:
-    <section className="panel"><h2>Official form preparation pending</h2>
-     <p>The current exporter is a watermarked training prototype. It intentionally cannot produce a purported official SSA-submittable form from a local case until the complete source-question mapping and signing workflow are verified.</p>
-     <p>For now, use the interview and source register to prepare information for the appropriate official SSA submission channel. Never export real medical data through the synthetic unencrypted JSON tool.</p>
-    </section>)} \n   {view==="casefiles"&&<VaultLab input={currentSnapshot} onRestore={restoreSyntheticCase} onVaultReady={vaultReady} initialMode={vaultMode}/>}
+   {view==="package"&&<PackageExport input={currentSnapshot}/>}\n   {view==="casefiles"&&<VaultLab input={currentSnapshot} onRestore={restoreSyntheticCase} onVaultReady={vaultReady} initialMode={vaultMode}/>}
    <div hidden={view!=="submissions"}><SubmissionTracker log={submissionLog} setLog={setSubmissionLog} caseReference={caseLabel} programs={programs}/></div>
    <p className="hint">Encrypted autosave requires an unlocked writable vault. The application does not file claims or determine eligibility. All signatures here are internal acknowledgments, not SSA-accepted electronic submissions.</p>
   </div>;
