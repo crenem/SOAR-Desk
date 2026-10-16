@@ -177,20 +177,34 @@ fn validate_human_review(review: UiReview) -> Result<(), String> {
 }
 
 
+fn local_case_review_ack(synthetic:bool,local:bool)->Result<(),String>{
+    if (synthetic && !local) || (!synthetic && local) {Ok(())}
+    else {Err("Select and explicitly acknowledge either fictional training or restricted local processing.".into())}
+}
 #[derive(Deserialize)]
-struct DocumentRequest { path: String, synthetic_confirmed: bool }
+struct DocumentRequest {
+    path: String,
+    synthetic_confirmed: bool,
+    #[serde(default)]
+    local_risk_acknowledged: bool,
+}
 #[tauri::command]
 fn extract_synthetic_document(request: DocumentRequest) -> Result<soar_documents::ExtractedDocument, String> {
-    if !request.synthetic_confirmed { return Err("Only synthetic test documents are permitted".into()); }
+    local_case_review_ack(request.synthetic_confirmed,request.local_risk_acknowledged)?;
     soar_documents::extract(std::path::Path::new(&request.path))
 }
 
 #[derive(Deserialize)]
-struct ClassifyRequest { text: String, synthetic_confirmed: bool }
+struct ClassifyRequest {
+    text: String,
+    synthetic_confirmed: bool,
+    #[serde(default)]
+    local_risk_acknowledged: bool,
+}
 #[tauri::command]
 fn classify_synthetic_text(request: ClassifyRequest) -> Result<serde_json::Value, String> {
     use std::{io::Write, process::{Command, Stdio}};
-    if !request.synthetic_confirmed { return Err("Only synthetic test documents are permitted".into()); }
+    local_case_review_ack(request.synthetic_confirmed,request.local_risk_acknowledged)?;
     if request.text.len() > 80_000 { return Err("Text exceeds development limit".into()); }
     let worker = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../workers/laya_worker.py");
     let python = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.venv-laya/bin/python");
@@ -208,11 +222,16 @@ fn classify_synthetic_text(request: ClassifyRequest) -> Result<serde_json::Value
 
 
 #[derive(Deserialize)]
-struct QwenRequest { text: String, synthetic_confirmed: bool }
+struct QwenRequest {
+    text: String,
+    synthetic_confirmed: bool,
+    #[serde(default)]
+    local_risk_acknowledged: bool,
+}
 #[tauri::command]
 fn extract_qwen_candidates(request: QwenRequest) -> Result<serde_json::Value, String> {
     use std::{io::Write, process::{Command, Stdio}};
-    if !request.synthetic_confirmed { return Err("Synthetic-only preview: real patient records are prohibited".into()); }
+    local_case_review_ack(request.synthetic_confirmed,request.local_risk_acknowledged)?;
     if request.text.is_empty() || request.text.len() > 5000 { return Err("Qwen passage must contain 1–5,000 characters".into()); }
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let worker = root.join("workers/qwen_worker.py");
