@@ -5,6 +5,7 @@ import { buildDraftPackage,type PackageInput } from "./application-package";
 
 type Props={input:PackageInput};
 export default function PackageExport({input}:Props){
+ const training=input.syntheticOnly!==false;
  const [acknowledged,setAcknowledged]=useState(false);
  const [busy,setBusy]=useState(false);
  const [pdfBusy,setPdfBusy]=useState(false);
@@ -64,33 +65,34 @@ export default function PackageExport({input}:Props){
  }
  async function exportSsa16Preview(){
    setPdfError("");setPdfResult("");
-   if(!acknowledged){setPdfError("Confirm fictional-only data before saving.");return;}
+   if(!acknowledged){setPdfError("Confirm the selected mode and the incomplete/unsigned export first.");return;}
    setPdfBusy(true);
    try{
      const data=buildDraftPackage(input);
      const selected=data.forms.find(form=>form.form_id==="SSA-16");
      if(!selected || selected.reference_only){throw new Error("Select SSDI to create an SSA-16 training draft.");}
      const output=await save({
-       title:"Save fictional SSA-16 review PDF",
-       defaultPath:data.case_reference+"-SSA-16-SYNTHETIC-DRAFT.pdf",
+       title:training?"Save fictional SSA-16 review PDF":"Save unsigned SSA-16 working PDF (contains personal information)",
+       defaultPath:data.case_reference+(training?"-SSA-16-SYNTHETIC-DRAFT.pdf":"-SSA-16-UNSIGNED-REVIEW.pdf"),
        filters:[{name:"PDF document",extensions:["pdf"]}]
      });
      if(!output){setPdfResult("Export canceled. No PDF created.");return;}
      const details=await invoke<{output:string;fields_populated:number;synthetic_only:boolean;ready_for_ssa_submission:boolean}>(
-       "export_synthetic_ssa16_pdf",
-       {request:{output_path:output,package:data,synthetic_confirmed:true}}
+       training?"export_synthetic_ssa16_pdf":"export_local_ssa16_working_pdf",
+       {request:{output_path:output,package:data,synthetic_confirmed:training,local_risk_acknowledged:!training}}
      );
-     if(details.synthetic_only!==true||details.ready_for_ssa_submission!==false){
-       throw new Error("PDF worker returned an unexpected safety status.");
+     if(details.synthetic_only!==training||details.ready_for_ssa_submission!==false){
+       throw new Error("PDF worker returned an unexpected signature/readiness status.");
      }
-     setPdfResult("Synthetic SSA-16 saved to "+details.output+" ("+details.fields_populated+" mapped responses). Not a complete SSA application.");
+     setPdfResult((training?"Training":"UNSIGNED working")+" SSA-16 saved to "+details.output+
+       " ("+details.fields_populated+" mapped responses). Review every question; signatures and SSA submission remain separate.");
    }catch(e){setPdfError(e instanceof Error?e.message:String(e));}
    finally{setPdfBusy(false);}
  }
  return <section className="panel">
-  <div className="eyebrow">PREPARATION OUTPUT · NO OFFICIAL SSA FORMS</div>
-  <h2>Reviewable draft package</h2>
-  <p className="muted">Generate an unencrypted JSON research/development draft containing only the current fictitious interview, mapped form questions, human evidence references, unresolved answers and staff-entered submission ledger. No medical-record files, official PDF forms, signatures or SSA receipts are bundled.</p>
+  <div className="eyebrow">{training?"TRAINING OUTPUT":"RESTRICTED LOCAL CASE · UNSIGNED REVIEW OUTPUT"}</div>
+  <h2>Form packet preparation</h2>
+  <p className="muted">{training?"Generate a fictional review-only JSON research draft and limited SSA-16 training PDF.":"Review collected facts and prepare an unsigned SSA-16 working PDF using the reviewed official template. This working PDF is unencrypted and may contain real personal information. Only mapped fields are populated; the claimant must review and complete missing fields before using an accepted signature and filing channel."}</p>
   {preview.error?<p className="error" role="alert">{preview.error}</p>:draft&&<>
    <div className="submit-summary">
     <div><strong>{draft.forms.length}</strong><span>Selected form outlines (partial mappings)</span></div>
@@ -98,8 +100,8 @@ export default function PackageExport({input}:Props){
     <div><strong>{draft.summary.unverified_evidence}</strong><span>Evidence sources not verified</span></div>
    </div>
    <div className="example">
-    <strong>Never an official SSA submission package</strong>
-    <p>All form question crosswalks are incomplete. Even with no unanswered mapped questions, the program <strong>cannot</strong> certify SSA form completeness, generate an official filing or infer an eligibility decision.</p>
+    <strong>{training?"Not an official SSA submission package":"Unsubmitted, unsigned working form"}</strong>
+    <p>Source question crosswalks remain incomplete. Even when all mapped questions have answers, SOAR Desk <strong>cannot</strong> certify that the form is complete, signed, submitted or accepted by SSA.</p>
    </div>
    <h3>Included form outlines</h3>
    <div className="draft-form-overview">{draft.forms.map(f=><div className="draft-form-line" key={f.form_id}>
@@ -119,15 +121,15 @@ export default function PackageExport({input}:Props){
   </>}
   <label className="checkline draft-ack">
    <input type="checkbox" checked={acknowledged} onChange={e=>setAcknowledged(e.target.checked)}/>
-   I confirm this workspace contains <strong>only fictional training information</strong> and understand the export is not a completed SSA form.
+   {training?"I confirm this workspace contains only fictional training information and understand the export is not a completed SSA form.":"I have organizational authorization to export this case. I understand the PDF is UNENCRYPTED, contains personal details, and is a PARTIAL, UNSIGNED working draft requiring manual review, completion, signature and filing."}
   </label>
-  <button type="button" className="primary" disabled={busy||!acknowledged||!!preview.error} onClick={exportDraft}>
-   {busy?"Saving…":"Save synthetic draft JSON…"}
-  </button>
+  {training&&<button type="button" className="primary" disabled={busy||!acknowledged||!!preview.error} onClick={exportDraft}>
+   {busy?"Saving…":"Save fictional draft JSON…"}
+  </button>}
   <div className="review">
-    <h3>Original SSA-16 PDF — controlled training preview</h3>
-    <p className="muted">Create a locally rendered, conspicuously watermarked copy of the <strong>September 2025 SSA-16</strong>. Only individually verified widget mappings are populated. Unmapped questions, real signatures, bank information and SSA-only fields remain blank.</p>
-    <p className="hint">The seven-page original form layout is preserved. The output is an interactive XFA-based review copy, not a flattened or approved final filing form. SSA-3368 PDF field binding remains disabled pending independent source-template verification.</p>
+    <h3>{training?"Original SSA-16 PDF — training preview":"SSA-16 — unsigned working PDF"}</h3>
+    <p className="muted">Create a locally rendered, visibly labeled {training?"training PDF":"unsigned, incomplete working PDF"} using the <strong>September 2025 SSA-16</strong>. Only independently reviewed widget mappings are populated. Unmapped questions, signatures, bank account information and SSA-only fields remain blank.</p>
+    <p className="hint">The seven-page original form layout is preserved. The output is interactive and requires review in a PDF viewer; it is not a verified complete or signed claim. SSA-3368 mapping remains blocked pending source-template field verification.</p>
     <div className="example">
       <strong>Blank SSA-16 template:</strong> {templateStatus?.message??"Checking local template..."}
       <p className="hint">If SSA blocks automatic downloads, download the original PDF using a browser (or reuse your blank SSA-16 file) and select it here. SOAR Desk verifies it against the reviewed original before installing it. This does not upload the file.</p>
@@ -136,13 +138,13 @@ export default function PackageExport({input}:Props){
       {templateError&&<p className="error" role="alert">{templateError}</p>}
     </div>
     <button type="button" className="secondary" disabled={pdfBusy||!acknowledged||!!preview.error||!input.programs.includes("ssdi")||!templateStatus?.installed} onClick={exportSsa16Preview}>
-      {pdfBusy?"Rendering…":"Save synthetic SSA-16 PDF…"}
+      {pdfBusy?"Rendering…":training?"Save fictional SSA-16 PDF…":"Save unsigned SSA-16 working PDF…"}
     </button>
     {pdfResult&&<p className="success" role="status">{pdfResult}</p>}
     {pdfError&&<p className="error" role="alert">{pdfError}</p>}
   </div>
   {result&&<p className="success" role="status">{result}</p>}
   {error&&<p className="error" role="alert">{error}</p>}
-  <p className="hint">You choose the local file path. The exporter refuses to overwrite existing files. The JSON is not encrypted: never use it with real applicant information. Nothing is sent to SSA or an external service.</p>
+  <p className="hint">You choose the local output path. Existing files cannot be overwritten. Never use unencrypted JSON exports for personal records. Working PDFs are plaintext and must be protected by your organization. Nothing is transmitted to SSA automatically.</p>
  </section>;
 }
