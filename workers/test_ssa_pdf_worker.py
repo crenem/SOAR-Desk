@@ -77,7 +77,7 @@ class SsaPdfBindingTests(unittest.TestCase):
         obj["file_kind"]="soar-desk-local-application-draft"
         obj["schema_version"]=2
         obj["synthetic_only"]=False
-        obj["case_reference"]="CASE-12345678-abcd-ef12"
+        obj["case_reference"]="CASE-12345678-abcd-ef12-1234-123456789abc"
         result=mapped_answers(obj)
         self.assertEqual(result["person.name"],"Jane Q Doe")
         self.assertNotIn("ssdi.signatureStatus",result)
