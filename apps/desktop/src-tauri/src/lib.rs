@@ -1,3 +1,5 @@
+mod vault_commands;
+
 use serde::Deserialize;
 use soar_core::screening::{
     AdultReferralScreen, EvidenceKind, EvidenceSource, EvidenceStatus, Finding,
@@ -412,7 +414,7 @@ fn export_synthetic_ssa16_pdf(request: SyntheticPdfRequest) -> Result<serde_json
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text, extract_qwen_candidates, export_synthetic_draft, export_synthetic_ssa16_pdf])
+        .invoke_handler(tauri::generate_handler![evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text, extract_qwen_candidates, export_synthetic_draft, export_synthetic_ssa16_pdf, vault_commands::create_synthetic_vault, vault_commands::open_synthetic_vault, vault_commands::backup_synthetic_vault, vault_commands::recover_synthetic_vault])
         .run(tauri::generate_context!())
         .expect("error starting SOAR Desk");
 }
