@@ -1,6 +1,6 @@
 # SOAR Desk production data architecture — proposed ADR 0002
 
-**Status: for decision, not deployed or approved.** 2026-10-16. The live desktop app remains a fictional-data prototype. The repo now includes a Rust `soar-storage` domain boundary and schema v1. There is **no disk adapter and no permission to enter real PII/PHI**.
+**Status: deployment profile clarified; crypto/recovery/sync decisions remain proposed, not deployed or approved.** 2026-10-16. The live desktop app remains a fictional-data prototype. The repo now includes a Rust `soar-storage` domain boundary and schema v1. There is **no disk adapter and no permission to enter real PII/PHI**.
 
 ## Goals and trust assumptions
 
@@ -93,9 +93,20 @@ The field table contains per-instance form IDs, edition, answer state, assertion
 - [ ] Full SSA form mapping and Acrobat visual/edition acceptance tests, no signature fabrication.
 - [ ] Threat model, penetration/security assessment, accessibility test, organization deployment approval.
 
+### Single-practitioner nonprofit deployment profile (adopted scope)
+
+- **Primary client:** nonprofit SOAR provider, typically operating with one named practitioner using a local-first Windows desktop.
+- **Custody:** one organization-owned vault, distinct from its operator's personal account; transfers, retention and destruction remain subject to organization policy.
+- **Account model:** one routine case operator in the first release; reserve roles for a separately authenticated, explicitly authorized recovery custodian and a future replacement practitioner, without implementing a multiuser collaboration server.
+- **Recovery:** strongly recommend a designated nonprofit recovery custodian with an independently protected recovery capability. **This is a recommendation, not a user-approved recovery method**; the exact authorization and key escrow policy need confirmation.
+- **Sync:** offline-first single-device by default; optional future organization-managed encrypted sync is a separate product milestone requiring multi-device conflict and revocation controls.
+- **Backups:** encrypted, tested restorability, and organization-controlled continuity through staff transitions; never depend solely on a departed practitioner's personal Windows profile or a single device-bound key.
+- **Handoff:** versioned, purpose-limited encrypted `.soarcase` format is proposed; no handoff exporter exists yet.
+- **Security invariant:** no real-client switch until authentication, SQLCipher, blob encryption, consent enforcement, audit and restore testing exist.
+
 ## Decisions needed before implementing encrypted production persistence
 
-**D1 — Users and case custody:** (A) single practitioner, sole custodian; (B) multiple staff in one nonprofit with case grants and administrator recovery; (C) multi-organization shared-host environment. **Recommended default: B**, single organization vault with local-first Windows desktop clients.
+**D1 — Users and case custody: RESOLVED (user guidance 2026-10-16).** Deploy primarily to **nonprofit organizations with one routine SOAR Desk practitioner per organization**. Ownership/custody stays with the organization; day-to-day operations stay with the practitioner. No hosted multi-tenant backend or routine user directory is required for v1. Preserve separate `organization_id`, `vault_id`, `principal_id` and access rules in persistent records to support later staff turnover or expansion without moving cases into a new database. Do not equate the sole operator with unrestricted ownership of the vault or its recovery secrets.
 
 **D2 — Sync:** (A) offline standalone device only; (B) optional nonprofit-managed encrypted sync; (C) centrally hosted multi-user app. **Recommended: A first, design interfaces for B.**
 
