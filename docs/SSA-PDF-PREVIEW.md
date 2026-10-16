@@ -17,19 +17,25 @@ The **Draft package** screen includes **Save synthetic SSA-16 PDF…** when the 
 
 ## Setup on Windows ARM64 through Ubuntu WSL2
 
-The normal `scripts/launch-wsl.sh` startup now performs optional one-time tasks:
+The normal `scripts/launch-wsl.sh` startup ensures that `pymupdf>=1.24,<1.27` is installed in the local `.venv-laya` Python environment. **It no longer downloads SSA-16 automatically.** SSA returns HTTP 403 to some automated clients even though the official PDF is accessible through a browser. Repeating the blocked download on every launch did not help.
 
-1. Ensure `pymupdf>=1.24,<1.27` in the local `.venv-laya` Python environment.
-2. Download only the unchanged official `https://www.ssa.gov/forms/ssa-16-bk.pdf` into ignored `.local/ssa-templates/ssa-16-bk.pdf`, after verifying an expected PDF header and the `SSA-16 (09-2025)` revision. Store SHA-256.
-3. Continue app launch if optional provisioning cannot complete. An attempted PDF export will then explain the missing prerequisite.
+**Recommended first-time installation:**
 
-Manual first-time setup:
+1. Open https://www.ssa.gov/forms/ssa-16-bk.pdf in a normal browser and save the **original blank SSA-16 (09-2025)** PDF. The originally supplied blank form used to develop this project is also suitable.
+2. Start SOAR Desk, choose **Application Preparation → Draft package**, and click **Install SSA-16 PDF from file…**.
+3. Select the original PDF you saved. The local Tauri command verifies that the bytes exactly match the reviewed original blank form (SHA-256 `09c088cbbf688b2e14a1061d2ff31cd481344de2ba5eacfac030f61045ba548e`), and copies it to ignored `.local/ssa-templates/ssa-16-bk.pdf` without overwriting another file.
+4. The PDF preview export becomes available once the template passes verification. Nothing is uploaded to SSA.
+
+**Optional command-line installation:**
 
 ```bash
 cd ~/Projects/SOAR-Desk
-.venv-laya/bin/python -m pip install 'pymupdf>=1.24,<1.27'
-bash scripts/prepare-ssa16-template.sh
+bash scripts/prepare-ssa16-template.sh "/mnt/c/Users/<WindowsUser>/Downloads/ssa-16-bk.pdf"
 ```
+
+Replace the placeholder with the actual Windows username/path, or another location reachable from WSL. Omitting the argument attempts the official URL **on demand only**. If SSA returns 403, use the browser or the in-app installer instead.
+
+This first-pass exporter is deliberately **fingerprint-pinned**: if SSA revises the PDF or a browser/editor re-saves it with different bytes, installation fails until the new template is independently inspected, mapped and tested.
 
 Never add official form templates, filled PDFs, applicant material, or draft JSON to Git.
 
