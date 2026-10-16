@@ -8,7 +8,7 @@ Research date: 2026-10-16. Scope: **adult initial SSI and/or SSDI applications**
 
 | Form | Name and original SSA download | When to enable in SOAR Desk |
 |---|---|---|
-| **SSA-16** | [Application for Disability Insurance Benefits (09-2025)](https://www.ssa.gov/forms/ssa-16.pdf) | SSDI (Title II) *paper* filing, where applicable. Existing user-provided sample already mapped. Online and assisted filing also available. |
+| **SSA-16** | [Application for Disability Insurance Benefits (09-2025)](https://www.ssa.gov/forms/ssa-16-bk.pdf) | SSDI (Title II) *paper* filing, where applicable. Existing user-provided sample already mapped. Online and assisted filing also available. |
 | **SSA-8000-BK** | [Application for Supplemental Security Income (09-2024)](https://www.ssa.gov/forms/ssa-8000-bk.pdf) | **Primary full paper SSI application**, per [POMS SI 00604.001](https://secure.ssa.gov/poms.nsf/lnx/0500604001). New template required in SOAR Desk. |
 | **SSA-8001-BK** | [SSI Application (Deferred or Abbreviated) (07-2023)](https://www.ssa.gov/forms/ssa-8001-bk.pdf) | **Alternative**, when SSA uses deferred development or an abbreviated application for clear nonmedical technical denial; **do not make this the routine SSI default**. See [POMS SI 00605.001](https://secure.ssa.gov/poms.nsf/lnx/0500605001) and [SI 00602.001](https://secure.ssa.gov/poms.nsf/links/0500602001). Existing user-supplied sample already mapped. |
 
