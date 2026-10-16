@@ -1,0 +1,48 @@
+/* Synthetic-only submission adapter and ledger transitions; no network. */
+const assert=require("node:assert/strict");
+const fs=require("node:fs");
+const path=require("node:path");
+const vm=require("node:vm");
+const ts=require("typescript");
+const source=fs.readFileSync(path.join(__dirname,"../src/ssa-submissions.ts"),"utf8");
+const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
+const exp={};
+vm.runInNewContext(compiled,{exports:exp,require,Date,Error}, {filename:"ssa-submissions.compiled.cjs"});
+const {preparePacket,reportManualSubmission,verifyExternalReceipt,stateOf,ADAPTERS,OFFICIAL_RESOURCES}=exp;
+let log={records:[],events:[]};
+const packet={id:"SYN-PKT-0001",caseReference:"SYN-CASE-001",purpose:"initial_application",
+ destination:"ssa",channel:"ssa_online",description:"Fictional initial application",
+ documentRefs:["SSA-16 (09-2025)","SSA-3368-BK (06-2024)"],createdBy:"SYN-STAFF",notes:""};
+assert.equal(ADAPTERS.filter(a=>a.availability==="active_manual").length,1);
+assert.equal(ADAPTERS.find(a=>a.id==="erews").availability,"not_connected");
+assert.equal(ADAPTERS.find(a=>a.id==="ars").availability,"not_connected");
+assert.ok(OFFICIAL_RESOURCES.every(r=>r.url.startsWith("https://www.ssa.gov/")));
+assert.throws(()=>preparePacket(log,{...packet,channel:"ere_portal"}),/initial SSI\/SSDI/);
+assert.throws(()=>preparePacket(log,{...packet,channel:"ars_portal"}),/initial SSI\/SSDI/);
+assert.throws(()=>preparePacket(log,{...packet,caseReference:"REAL-CASE"}),/Only explicitly synthetic/);
+assert.throws(()=>preparePacket(log,{...packet,documentRefs:[]}),/at least one/);
+log=preparePacket(log,packet);
+assert.equal(stateOf(log.records[0]),"prepared");
+assert.equal(log.events[0].type,"packet_prepared");
+assert.equal(log.records[0].receipt,undefined);
+assert.throws(()=>preparePacket(log,packet),/already exists/);
+const receipt={receiptOn:"2026-10-19",reference:"SYN-SSA-ACK-001",verifiedBy:"SYN-REVIEWER",evidenceSource:"Fictional SSA acknowledgment"};
+assert.throws(()=>verifyExternalReceipt(log,packet.id,receipt),/Record an actual submission/);
+const reported={submittedOn:"2026-10-18",reportedBy:"SYN-STAFF",attested:true,evidenceNote:"Fictional SSA application portal submission"};
+assert.throws(()=>reportManualSubmission(log,packet.id,{...reported,attested:false}),/explicitly confirm/);
+assert.throws(()=>reportManualSubmission(log,packet.id,{...reported,submittedOn:"2026-02-31"}),/valid calendar date/);
+assert.equal(stateOf(log.records[0]),"prepared");
+log=reportManualSubmission(log,packet.id,reported);
+assert.equal(stateOf(log.records[0]),"reported_submitted");
+assert.equal(log.events[1].type,"manual_submission_reported");
+assert.throws(()=>reportManualSubmission(log,packet.id,reported),/already been recorded/);
+assert.throws(()=>verifyExternalReceipt(log,packet.id,{...receipt,reference:""}),/identifier is required/);
+assert.throws(()=>verifyExternalReceipt(log,packet.id,{...receipt,receiptOn:"2026-10-17"}),/precede/);
+log=verifyExternalReceipt(log,packet.id,receipt);
+assert.equal(stateOf(log.records[0]),"receipt_verified");
+assert.equal(log.events[2].type,"external_receipt_verified");
+assert.equal(log.records[0].receipt.reference,receipt.reference);
+assert.throws(()=>verifyExternalReceipt(log,packet.id,receipt),/already recorded/);
+assert.equal(log.records[0].submitted.submittedOn,"2026-10-18");
+assert.equal(log.events.length,3);
+console.log("SSA synthetic submission ledger transitions passed.");
