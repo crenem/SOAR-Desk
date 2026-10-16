@@ -138,7 +138,7 @@ export default function ApplicationWorkspace(){
  return <div className="application-workspace">
    <div className="eyebrow">POST-SCREENING · ADULT SSI / SSDI</div>
    <h1>Application workspace</h1>
-   <p className="intro">One applicant interview, reusable facts, and separate SSA form sections. No real client information: this preview saves nothing and does not generate or submit official forms.</p>
+   <p className="intro">One applicant interview, reusable facts, and separate SSA form sections. No real client information: this preview saves nothing. An SSA-16 watermarked training PDF can be generated, but no complete form can be submitted.</p>
    <div className="panel intake-setup">
      <div className="fieldgrid">
       <label>Fictional case reference<input value={caseLabel} onChange={e=>setCaseLabel(e.target.value)} disabled={submissionLog.records.length>0} maxLength={80}/></label>
@@ -195,7 +195,7 @@ export default function ApplicationWorkspace(){
       <p className="hint">{f.note}</p>
       {f.sections.map(s=>{const pending=s.questions.filter(q=>applicable(q,answers)).filter(q=>{const a=answers[q.key];return !a || (!a.value.trim()&&a.status!=="unknown");});return pending.length?<div key={s.id}><strong>{s.title}</strong><p className="hint">{pending.map(q=>q.ref+": "+q.label).join(" · ")}</p></div>:null;})}
     </details>)}
-    <div className="example"><strong>Not ready for an SSA submission</strong><p>Original PDF field population, comprehensive question mapping, applicant review, physical signatures, SSA-specific submission requirements, protected storage, and audit trails are not implemented. No claim has been filed or signed.</p></div>
+    <div className="example"><strong>Not ready for an SSA submission</strong><p>Only a limited SSA-16 synthetic PDF preview is implemented. Complete field mapping, other SSA PDF population, applicant review, physical signatures, SSA submission requirements, protected storage and audit trails remain unfinished. No claim has been filed or signed.</p></div>
     <p><strong>Current synthetic case:</strong> {caseLabel}</p>
     <p><strong>Applicant:</strong> {display(answers["person.name"])} · <strong>Onset:</strong> {display(answers["work.onset"])} · <strong>Reported living arrangement:</strong> {display(answers["living.type"])}</p>
    </section>}
