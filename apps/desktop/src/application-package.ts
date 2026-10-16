@@ -50,7 +50,7 @@ export type FormSnapshot={
 };
 export type DraftPackage={
   file_kind:"soar-desk-synthetic-application-draft"|"soar-desk-local-application-draft";
-  schema_version:1;
+  schema_version:1|2;
   synthetic_only:boolean;
   disclaimer:string;
   case_reference:string;
