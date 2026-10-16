@@ -5,7 +5,8 @@
 use serde::{Deserialize, Serialize};
 use soar_storage::sealed_vault::{
     authenticate_backup, open_practitioner, recover_and_rekey, seal_local_case,
-    encrypted_file_is_synthetic, unlock_for_autosave, UnlockedSession, MAX_ENVELOPE_BYTES,
+    encrypted_file_is_synthetic, unlock_for_autosave, reencrypt_document_for_recovery,
+    UnlockedSession, MAX_ENVELOPE_BYTES, MAX_DOCUMENT_BYTES, MAX_DOCUMENT_ENVELOPE_BYTES,
 };
 use std::{
     fs::{self, OpenOptions},
@@ -81,6 +82,108 @@ fn atomic_ciphertext_replace(path: &Path, data: &[u8], expected_hash: &[u8]) -> 
         let _ = directory.sync_all();
     }
     Ok(())
+}
+
+// Source documents are stored as separate authenticated ciphertext files.
+// Filenames and the case-directory name contain only opaque IDs.
+fn blob_folder(vault:&Path)->PathBuf{
+    let mut name=vault.as_os_str().to_os_string();
+    name.push(".blobs");
+    PathBuf::from(name)
+}
+fn blob_path(vault:&Path,blob_id:&str)->Result<PathBuf,String>{
+    if blob_id.len()!=32||!blob_id.bytes().all(|b|b.is_ascii_hexdigit()){
+        return Err("Invalid encrypted evidence identifier.".into());
+    }
+    Ok(blob_folder(vault).join(format!("{blob_id}.soarblob")))
+}
+fn source_document(path:&str)->Result<Vec<u8>,String>{
+    let input=Path::new(path);
+    if !input.is_absolute(){return Err("Select an absolute local source file.".into())}
+    let extension=input.extension().and_then(|v|v.to_str()).unwrap_or("").to_ascii_lowercase();
+    if !["pdf","png","jpeg","jpg","tif","tiff","txt"].contains(&extension.as_str()){
+        return Err("Source must be a PDF, image, or text file.".into());
+    }
+    let meta=fs::symlink_metadata(input).map_err(|_|"Source file is inaccessible.".to_string())?;
+    if !meta.file_type().is_file()||meta.len()==0||meta.len()>MAX_DOCUMENT_BYTES as u64{
+        return Err("Source file must be a regular document under 20 MiB.".into());
+    }
+    let bytes=fs::read(input).map_err(|_|"Could not read the original source.".to_string())?;
+    if bytes.len()>MAX_DOCUMENT_BYTES{return Err("Document exceeds encrypted attachment limit.".into())}
+    Ok(bytes)
+}
+#[derive(Deserialize)]
+pub struct AttachEvidenceRequest{
+    source_path:String,
+    case_reference:String,
+    synthetic_confirmed:bool,
+    #[serde(default)] local_risk_acknowledged:bool,
+}
+#[derive(Serialize)]
+pub struct AttachedEvidence{
+    pub blob_id:String,
+    pub original_name:String,
+    pub bytes:u64,
+    pub sha256:String,
+    pub encrypted_path:String,
+}
+#[tauri::command]
+pub fn attach_evidence_document(request:AttachEvidenceRequest)->Result<AttachedEvidence,String>{
+    let guard=active().lock().map_err(|_|"Vault lock unavailable.")?;
+    let active=guard.as_ref().ok_or("Create or unlock a writable encrypted vault before attaching records.")?;
+    validate_local_ack(active.synthetic_only,request.synthetic_confirmed,request.local_risk_acknowledged)?;
+    if request.case_reference!=active.session.case_reference(){
+        return Err("The source is not being attached to the currently unlocked case.".into());
+    }
+    let input=Zeroizing::new(source_document(&request.source_path)?);
+    let (id,cipher)=error_message(active.session.encrypt_document(&input))?;
+    let path=blob_path(&active.path,&id)?;
+    let folder=blob_folder(&active.path);
+    fs::create_dir_all(&folder).map_err(|_|"Cannot create encrypted evidence directory.".to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _=fs::set_permissions(&folder,fs::Permissions::from_mode(0o700));
+    }
+    let dest=new_encrypted_file(&path.display().to_string(),"soarblob",&cipher)?;
+    let name=Path::new(&request.source_path).file_name().and_then(|v|v.to_str())
+        .unwrap_or("source-document").to_string();
+    Ok(AttachedEvidence{
+        blob_id:id,original_name:name,bytes:input.len() as u64,
+        sha256:format!("{:x}",Sha256::digest(&*input)),encrypted_path:dest
+    })
+}
+#[derive(Deserialize)]
+pub struct ExportEvidenceRequest{
+    case_reference:String,
+    blob_id:String,
+    output_path:String,
+    acknowledge_plaintext_export:bool,
+}
+#[tauri::command]
+pub fn export_evidence_document(request:ExportEvidenceRequest)->Result<String,String>{
+    if !request.acknowledge_plaintext_export{
+        return Err("Confirm that this export creates an UNENCRYPTED local copy.".into());
+    }
+    let guard=active().lock().map_err(|_|"Vault lock unavailable.")?;
+    let active=guard.as_ref().ok_or("Unlock the original writable case vault first.")?;
+    if request.case_reference!=active.session.case_reference(){
+        return Err("Evidence does not belong to the currently unlocked case.".into());
+    }
+    let source=blob_path(&active.path,&request.blob_id)?;
+    let metadata=fs::symlink_metadata(&source).map_err(|_|"Encrypted evidence file not found.".to_string())?;
+    if !metadata.file_type().is_file()||metadata.len()>MAX_DOCUMENT_ENVELOPE_BYTES as u64{
+        return Err("Encrypted evidence file invalid or oversized.".into());
+    }
+    let sealed=fs::read(&source).map_err(|_|"Cannot read encrypted evidence.".to_string())?;
+    let plaintext=error_message(active.session.decrypt_document(&sealed,&request.blob_id))?;
+    let output=Path::new(&request.output_path);
+    if !output.is_absolute(){return Err("Choose an absolute destination.".into())}
+    let ext=output.extension().and_then(|v|v.to_str()).unwrap_or("").to_ascii_lowercase();
+    if !["pdf","png","jpg","jpeg","tif","tiff","txt"].contains(&ext.as_str()){
+        return Err("Export destination must have a supported document extension.".into());
+    }
+    new_encrypted_file(&request.output_path,&ext,&plaintext)
 }
 
 #[derive(Deserialize)]
