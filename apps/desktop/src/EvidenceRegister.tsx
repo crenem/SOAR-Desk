@@ -26,6 +26,20 @@ export default function EvidenceRegister({evidence,setEvidence,syntheticOnly=tru
   }catch(e){setError(String(e));}
   finally{setBusy(null);}
  }
+ async function verifyAttached(item:EvidenceReference){
+  if(!item.blobId||!item.sha256||item.bytes===undefined)return;
+  setError("");setNotice("");setBusy(item.id);
+  try{
+   const result=await invoke<{authenticated:boolean;sha256_matched:boolean;bytes_matched:boolean}>("verify_attached_evidence",{request:{
+      case_reference:caseReference,blob_id:item.blobId,
+      expected_sha256:item.sha256,expected_bytes:item.bytes
+   }});
+   if(!result.authenticated||!result.sha256_matched||!result.bytes_matched)
+     throw Error("Source integrity verification did not pass.");
+   setNotice("Encrypted original for "+item.id+" passed case authentication, byte count and SHA-256 verification. Clinical review status is unchanged.");
+  }catch(e){setError("Encrypted original verification FAILED: "+String(e));}
+  finally{setBusy(null);}
+ }
  async function exportAttached(item:EvidenceReference){
   if(!item.blobId)return;
   setError("");setNotice("");setBusy(item.id);
@@ -79,6 +93,7 @@ export default function EvidenceRegister({evidence,setEvidence,syntheticOnly=tru
    <div className="actions">
      {!e.blobId?<button type="button" className="secondary" disabled={busy!==null} onClick={()=>void attach(e.id)}>Attach encrypted source…</button>:<>
        <span className="hint">Encrypted source: {e.originalFilename||"document"} · {e.bytes??0} bytes · SHA-256 {e.sha256?.slice(0,12)}…</span>
+       <button type="button" className="secondary" disabled={busy!==null||!e.sha256||e.bytes===undefined} onClick={()=>void verifyAttached(e)}>Verify encrypted original</button>
        <button type="button" className="secondary" disabled={busy!==null} onClick={()=>void exportAttached(e)}>Export decrypted copy…</button>
      </>}
      <button type="button" className="linkbutton" disabled={busy!==null} onClick={()=>{
