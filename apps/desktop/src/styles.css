@@ -145,3 +145,15 @@
 .signature-receipts{border-top:1px solid #d6e2e7;margin-top:25px;padding-top:20px}
 .signature-receipt{display:flex;flex-direction:column;gap:5px;background:#f5fafb;border:1px solid #cce0e5;border-radius:7px;padding:14px;margin:10px 0;font-size:13px}
 .signature-receipt small{color:#5b7380}
+
+/* Local operator sign-in, separate from per-case cryptographic unlock. */
+.operator-lock-screen{min-height:calc(100vh - 38px);display:grid;place-items:center;padding:40px 20px;background:radial-gradient(circle at 20% 10%,#e3f2f0,#f5f7fa 60%)}
+.operator-lock-panel{width:min(460px,100%);background:white;border:1px solid #d7e3e9;border-radius:16px;padding:38px;box-shadow:0 22px 55px #102b4016}
+.operator-lock-panel h1{font-size:30px;margin:14px 0}
+.operator-lock-panel .primary{margin:7px 0 16px;width:100%}
+.operator-lock-panel .hint{line-height:1.6;margin-top:16px}
+.operator-sidebar{font-size:12px;color:#d5e7ed;background:#1c3e53;border-radius:8px;margin:-31px 4px 18px;padding:12px}
+.operator-sidebar strong{color:white}
+.operator-lock-button{display:block;border:1px solid #7b9cad;color:white;background:transparent;border-radius:6px;padding:7px 11px;margin-top:10px;font-size:12px}
+.operator-lock-button:hover{background:#325a6e}
+@media(max-width:820px){.operator-sidebar{margin:8px 4px 15px}.operator-lock-panel{padding:25px}}
