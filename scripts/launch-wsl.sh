@@ -82,7 +82,16 @@ if [[ ! -f "$ROOT/.local/ssa-templates/ssa-16-bk.pdf" ]]; then
 fi
 
 server_pid=""
-if python3 "$ROOT/scripts/probe-geniex.py"; then
+if [[ "${SOAR_LAUNCH_ACCELERATOR:-}" == "cuda" ]]; then
+  # The separate x86-64 CUDA launcher has started and verified our local model.
+  # Do not replace it with GenieX or launch a second, CPU-only llama.cpp.
+  if ! curl -fsS --max-time 3 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
+    echo "CUDA launcher selected, but the local model server is not ready on port $PORT." >&2
+    exit 1
+  fi
+  echo "Using dedicated NVIDIA CUDA llama.cpp backend on port $PORT."
+  export SOAR_QWEN_BACKEND=cpu
+elif python3 "$ROOT/scripts/probe-geniex.py"; then
   echo "GenieX GGUF passed a real JSON-generation test from WSL2."
   echo "Using GenieX local inference; the actual GPU/NPU/CPU execution device is not verified by this probe."
   echo "Skipping separate Linux CPU model startup to conserve memory."
