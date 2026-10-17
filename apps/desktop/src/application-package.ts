@@ -6,6 +6,13 @@ import {FORMS,applicable,progress,type Answers,type FormId,type Program,type Row
 import type {SubmissionLog} from "./ssa-submissions";
 import type {SignatureReceipt} from "./signature-policy";
 
+export type DocumentReviewRecord={
+  outcome:"HumanVerified"|"Rejected"|"NeedsMoreEvidence";
+  reviewerId:string;
+  rationale:string;
+  recordedAt:string;
+  documentSha256:string;
+};
 export type EvidenceStatus="pending"|"human_verified"|"rejected";
 export type EvidenceReference={
   id:string;
@@ -20,6 +27,8 @@ export type EvidenceReference={
   originalFilename?:string;
   sha256?:string;
   bytes?:number;
+  /** Document-wide human judgment; does NOT verify an individual clinical finding. */
+  documentReview?:DocumentReviewRecord;
 };
 export type SyntheticRecoveryEvent={
   event:string;actor:string;reason:string;old_vault_retirement:string;
