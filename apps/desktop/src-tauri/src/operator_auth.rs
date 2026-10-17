@@ -6,9 +6,10 @@ use argon2::{password_hash::{PasswordHash,PasswordHasher,PasswordVerifier,SaltSt
 use serde::{Deserialize,Serialize};
 use std::{env,fs::{self,OpenOptions},io::{ErrorKind,Write},path::PathBuf,sync::{Mutex,OnceLock},time::{Duration,Instant}};
 use zeroize::Zeroizing;
+use uuid::Uuid;
 
 const IDLE_SECONDS:u64=15*60;
-const MAX_ACCOUNT_BYTES:u64=4096;
+const MAX_ACCOUNT_BYTES:u64=16*1024;
 const FAILED_LIMIT:u32=5;
 const LOCKOUT_SECONDS:u64=5*60;
 
@@ -18,6 +19,16 @@ struct Account {
     version:u32,
     username:String,
     password_hash:String,
+    #[serde(default)]
+    profile_id:String,
+    #[serde(default)]
+    oidc_links:Vec<OidcLink>,
+}
+#[derive(Serialize,Deserialize,Clone)]
+#[serde(deny_unknown_fields)]
+struct OidcLink {
+    issuer:String,
+    subject:String,
 }
 #[derive(Default)]
 struct Session {
@@ -35,6 +46,8 @@ pub struct OperatorStatus {
     pub enrolled:bool,
     pub authenticated:bool,
     pub username:Option<String>,
+    pub profile_id:Option<String>,
+    pub zitadel_linked:bool,
     pub idle_seconds:u64,
 }
 #[derive(Deserialize)]
@@ -90,7 +103,8 @@ fn account()->Result<Option<Account>,String>{
     Ok(Some(parsed))
 }
 fn status_inner()->Result<OperatorStatus,String>{
-    let enrolled=account()?.is_some();
+    let stored=account()?;
+    let enrolled=stored.is_some();
     let mut guard=session().lock().map_err(|_|"Session lock unavailable.")?;
     let fresh=guard.active_at.is_some_and(|t|t.elapsed()<Duration::from_secs(IDLE_SECONDS));
     if !fresh {guard.username=None;guard.active_at=None;}
@@ -101,7 +115,9 @@ fn status_inner()->Result<OperatorStatus,String>{
         // Removes any case VMK from the unlocked native session on expiry.
         let _=crate::vault_commands::lock_synthetic_autosave();
     }
-    Ok(OperatorStatus{enrolled,authenticated,username,idle_seconds:IDLE_SECONDS})
+    let profile_id=if authenticated{stored.as_ref().map(|a|a.profile_id.clone()).filter(|s|!s.is_empty())}else{None};
+    let zitadel_linked=stored.as_ref().is_some_and(|a|!a.oidc_links.is_empty());
+    Ok(OperatorStatus{enrolled,authenticated,username,profile_id,zitadel_linked,idle_seconds:IDLE_SECONDS})
 }
 #[tauri::command]
 pub fn operator_status()->Result<OperatorStatus,String>{status_inner()}
@@ -117,7 +133,7 @@ pub fn enroll_operator(request:OperatorCredentials)->Result<OperatorStatus,Strin
     let salt=SaltString::generate(&mut OsRng);
     let password_hash=Argon2::default().hash_password(secret.as_bytes(),&salt)
         .map_err(|_|"Could not hash operator password.".to_string())?.to_string();
-    let bytes=serde_json::to_vec(&Account{version:1,username:username.into(),password_hash})
+    let bytes=serde_json::to_vec(&Account{version:1,username:username.into(),password_hash,profile_id:Uuid::new_v4().to_string(),oidc_links:vec![]})
         .map_err(|_|"Could not prepare operator credential file.".to_string())?;
     let mut options=OpenOptions::new();
     options.write(true).create_new(true);
@@ -191,6 +207,61 @@ pub fn require_operator()->Result<(),String>{
     drop(state);
     let _=crate::vault_commands::lock_synthetic_autosave();
     Err("SOAR Desk is locked. Sign in to access case records.".into())
+}
+/// Link only after the operator has signed in locally AND the external
+/// provider's signed ID token has been cryptographically verified.
+pub(crate) fn link_oidc_identity(issuer:&str,subject:&str)->Result<OperatorStatus,String>{
+    require_operator()?;
+    if issuer.len()>512||subject.is_empty()||subject.len()>512{
+        return Err("OIDC issuer or subject exceeds allowed bounds.".into());
+    }
+    let mut account=account()?.ok_or("Enroll a local operator first.")?;
+    let current=session().lock().map_err(|_|"Operator session unavailable.")?;
+    if current.username.as_deref()!=Some(account.username.as_str()){
+        return Err("Local operator session changed during account linking.".into());
+    }
+    drop(current);
+    if account.oidc_links.iter().any(|link|link.issuer==issuer && link.subject!=subject){
+        return Err("This ZITADEL issuer is already linked to a different subject.".into());
+    }
+    if !account.oidc_links.iter().any(|link|link.issuer==issuer&&link.subject==subject){
+        if account.oidc_links.len()>=4{return Err("Maximum linked identity providers reached.".into());}
+        account.oidc_links.push(OidcLink{issuer:issuer.into(),subject:subject.into()});
+    }
+    if account.profile_id.is_empty(){account.profile_id=Uuid::new_v4().to_string();}
+    save_account(&account)?;
+    status_inner()
+}
+/// Federated login is deliberately NOT self-enrollment or email-based
+/// account matching. A separately authenticated local operator links first.
+pub(crate) fn login_linked_oidc(issuer:&str,subject:&str)->Result<OperatorStatus,String>{
+    let stored=account()?.ok_or("Create the local operator profile first.")?;
+    if !stored.oidc_links.iter().any(|link|link.issuer==issuer&&link.subject==subject){
+        return Err("This ZITADEL identity has not been linked to the local operator. Sign in locally and link it first.".into());
+    }
+    let mut current=session().lock().map_err(|_|"Session unavailable.")?;
+    current.username=Some(stored.username);
+    current.active_at=Some(Instant::now());
+    current.failures=0;current.locked_until=None;
+    drop(current);
+    status_inner()
+}
+fn save_account(record:&Account)->Result<(),String>{
+    let dest=account_path()?;
+    if !dest.is_file(){return Err("Local operator credential file is missing.".into());}
+    let parent=dest.parent().ok_or("Missing credential directory.")?;
+    let mut temp=tempfile::Builder::new().prefix(".operator-").tempfile_in(parent)
+        .map_err(|_|"Cannot prepare protected credential update.".to_string())?;
+    #[cfg(unix)]{
+        use std::os::unix::fs::PermissionsExt;
+        temp.as_file().set_permissions(fs::Permissions::from_mode(0o600))
+            .map_err(|_|"Cannot secure operator profile update.".to_string())?;
+    }
+    let bytes=serde_json::to_vec(record).map_err(|_|"Could not serialize profile.".to_string())?;
+    temp.write_all(&bytes).and_then(|_|temp.as_file().sync_all())
+        .map_err(|_|"Cannot sync operator profile changes.".to_string())?;
+    temp.persist(&dest).map_err(|_|"Cannot save linked identity.".to_string())?;
+    Ok(())
 }
 #[cfg(test)]
 mod tests{
