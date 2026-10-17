@@ -102,12 +102,12 @@ export default function VaultLab({input,onRestore,onVaultReady,initialMode="crea
        setFeedback("Encrypted case saved: "+result.path+". Separate the organization recovery secret from the practitioner secret. This version is not independently security-certified.");
      }else if(mode==="open"){
        if(!selected)throw Error("Select an encrypted vault or backup.");
+       // Confirm BEFORE native unlock changes the active autosave vault.
+       // Canceling must never discard the current session's encryption key.
+       if(!window.confirm("Unlocking this file will REPLACE the current in-memory interview, evidence and submission history. Save the existing case first if needed. Continue?"))return;
        const restored=await invoke<unknown>("open_synthetic_vault",{request:{
          input_path:selected,practitioner_passphrase:practitioner,...securityArgs}});
        const data=asCase(restored);
-       if(!window.confirm("Replace the current in-memory synthetic interview, evidence and submission history with "+data.caseReference+"?")){
-         await invoke("lock_synthetic_autosave");onVaultReady?.(null);return;
-       }
        onRestore(data);
        onVaultReady?.(selected.endsWith(".soarvault")?selected:null);
        setFeedback("Decrypted and restored case "+data.caseReference+" into this session. This is a local vault unlock, not an organizational login.");
