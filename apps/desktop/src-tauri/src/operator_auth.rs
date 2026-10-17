@@ -60,7 +60,7 @@ fn valid_name(name:&str)->bool {
 fn valid_secret(secret:&str)->bool {
     (16..=256).contains(&secret.len())&&secret.chars().any(|c|!c.is_whitespace())
 }
-fn private_directory()->Result<PathBuf,String>{
+pub(crate) fn private_directory()->Result<PathBuf,String>{
     let home=env::var_os("HOME").ok_or("Cannot locate the operator's home directory.")?;
     let config=env::var_os("XDG_CONFIG_HOME").map(PathBuf::from)
         .unwrap_or_else(||PathBuf::from(home).join(".config"));
