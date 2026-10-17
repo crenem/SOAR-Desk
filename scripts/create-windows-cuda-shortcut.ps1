@@ -15,8 +15,9 @@ $cmdPath = Join-Path $launcherDir 'Launch SOAR Desk CUDA.cmd'
 $cmdContent = @'
 @echo off
 title SOAR Desk - NVIDIA CUDA
-rem Launch Ubuntu in its home directory. Clone the open-source app on first use.
-wsl.exe -d Ubuntu-24.04 --cd ~ -- bash -lc "mkdir -p ~/Projects && if [ ! -d ~/Projects/SOAR-Desk/.git ]; then git clone https://github.com/crenem/SOAR-Desk.git ~/Projects/SOAR-Desk; fi && bash ~/Projects/SOAR-Desk/scripts/launch-wsl-cuda.sh"
+rem Install the repo if missing, otherwise fast-forward it BEFORE locating the CUDA launcher.
+rem A fast-forward-only update protects local commits and refuses to overwrite work.
+wsl.exe -d Ubuntu-24.04 --cd ~ -- bash -lc "mkdir -p ~/Projects && if [ ! -d ~/Projects/SOAR-Desk/.git ]; then git clone https://github.com/crenem/SOAR-Desk.git ~/Projects/SOAR-Desk; else git -C ~/Projects/SOAR-Desk pull --ff-only origin main; fi && test -f ~/Projects/SOAR-Desk/scripts/launch-wsl-cuda.sh && bash ~/Projects/SOAR-Desk/scripts/launch-wsl-cuda.sh"
 if errorlevel 1 (
     echo.
     echo SOAR Desk could not start. Review the error above.
