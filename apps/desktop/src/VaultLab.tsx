@@ -5,7 +5,7 @@ import type {PackageInput} from "./application-package";
 
 /** Development-only encrypted case snapshot; not production PHI storage. */
 type Mode="create"|"open"|"backup"|"recover";
-type Props={input:PackageInput;onRestore:(newCase:PackageInput)=>void;onVaultReady?:(path:string|null)=>void;initialMode?:Mode};
+type Props={input:PackageInput;onRestore:(newCase:PackageInput)=>void;onVaultReady?:(path:string|null)=>void;canReplaceCase?:()=>boolean;beforeBackup?:(path:string)=>Promise<boolean>;initialMode?:Mode};
 type Saved={path:string;encrypted:boolean;synthetic_only:boolean;note:string};
 const fileFilters=[{name:"Encrypted SOAR training case",extensions:["soarvault","soarbackup"]}];
 const message=(e:unknown)=>e instanceof Error?e.message:String(e);
@@ -40,7 +40,7 @@ function asCase(value:unknown):PackageInput{
    signatures:Array.isArray(v.signatures)?v.signatures as PackageInput["signatures"]:[]
  };
 }
-export default function VaultLab({input,onRestore,onVaultReady,initialMode="create"}:Props){
+export default function VaultLab({input,onRestore,onVaultReady,canReplaceCase,beforeBackup,initialMode="create"}:Props){
  const [mode,setMode]=useState<Mode>(initialMode);
  useEffect(()=>{setMode(initialMode);},[initialMode]);
  const [selected,setSelected]=useState("");
@@ -104,6 +104,7 @@ export default function VaultLab({input,onRestore,onVaultReady,initialMode="crea
        if(!selected)throw Error("Select an encrypted vault or backup.");
        // Confirm BEFORE native unlock changes the active autosave vault.
        // Canceling must never discard the current session's encryption key.
+       if(canReplaceCase && !canReplaceCase())return;
        if(!window.confirm("Unlocking this file will REPLACE the current in-memory interview, evidence and submission history. Save the existing case first if needed. Continue?"))return;
        const restored=await invoke<unknown>("open_synthetic_vault",{request:{
          input_path:selected,practitioner_passphrase:practitioner,...securityArgs}});
@@ -113,6 +114,7 @@ export default function VaultLab({input,onRestore,onVaultReady,initialMode="crea
        setFeedback("Decrypted and restored case "+data.caseReference+" into this session. This is a local vault unlock, not an organizational login.");
      }else if(mode==="backup"){
        if(!selected)throw Error("Select an encrypted source vault.");
+       if(beforeBackup && !(await beforeBackup(selected)))return;
        const output=await save({title:"Save encrypted training vault backup",
          defaultPath:"SYN-CASE-TRAINING.soarbackup",
          filters:[{name:"Encrypted backup",extensions:["soarbackup"]}]});
