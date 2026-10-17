@@ -1,6 +1,7 @@
 import { useState } from "react";
 import WindowChrome from "./WindowChrome";
 import OperatorGate from "./OperatorGate";
+import ZitadelIdentity,{type FederatedOperatorStatus} from "./ZitadelIdentity";
 import ProgressNav from "./ProgressNav";
 import type {FormCoverage,MissingTarget} from "./form-navigation";
 import Documents from "./Documents";
@@ -32,9 +33,9 @@ type Domain = typeof domains[number];
 const friendlyDomain: Record<Domain,string> = { Physical: "Physical abilities", Cognitive: "Cognition and concentration", Social: "Interacting with others", Adaptation: "Adapting and managing oneself", AttendanceAndPersistence: "Attendance and sustained performance" };
 
 export default function App(){
- return <OperatorGate>{(operator,lock)=><AuthenticatedWorkspace operator={operator} onLock={lock}/>}</OperatorGate>;
+ return <OperatorGate>{(operator,lock,linked,profileId,onLinked)=><AuthenticatedWorkspace operator={operator} onLock={lock} linked={linked} profileId={profileId} onLinked={onLinked}/>}</OperatorGate>;
 }
-function AuthenticatedWorkspace({operator,onLock}:{operator:string;onLock:()=>void}) {
+function AuthenticatedWorkspace({operator,onLock,linked,profileId,onLinked}:{operator:string;onLock:()=>void;linked:boolean;profileId:string|null;onLinked:(s:FederatedOperatorStatus)=>void}) {
   const [step, setStep] = useState(0);
   const [workspaceMode, setWorkspaceMode] = useState<"screening"|"documents"|"applications">("applications");
   const [caseReference,setCaseReference]=useState("SYN-APPLICATION-001");
@@ -81,6 +82,11 @@ function AuthenticatedWorkspace({operator,onLock}:{operator:string;onLock:()=>vo
       <div className="operator-sidebar">
        <span>Signed in: <strong>{operator}</strong></span>
        <button type="button" className="operator-lock-button" onClick={onLock}>Lock SOAR Desk</button>
+       <details className="operator-zitadel">
+         <summary>Profile &amp; ZITADEL</summary>
+         {profileId&&<p className="hint">SOAR profile ID: <code>{profileId}</code></p>}
+         <ZitadelIdentity mode="link" linked={linked} onSuccess={onLinked}/>
+       </details>
       </div>
       <div className="sidebar-header">REFERRAL WORKSPACE</div>
       <div className="workspace-nav" role="group" aria-label="Workspace">
