@@ -17,6 +17,19 @@ Updated October 16, 2026. **Restricted development beta; not approved for live n
 
 Current integration smoke tests and operational cautions: [Usability and release checklist](USABILITY-AND-RELEASE-CHECKLIST.md). Architecture: [Production vault decision](PRODUCTION-VAULT-ADR.md). Official form constraints: [SSA integration boundary](SSA-INTEGRATION-BOUNDARY.md).
 
+## October 16 development pass — evidence and case-safety improvements
+
+The following changes have been committed to the development branch:
+
+- **Evidence integrity:** practitioners can re-authenticate a saved encrypted original against its recorded SHA-256 and byte count. A case backup refuses to proceed if a registered encrypted original is missing, corrupt or different from its recorded metadata; orphan encrypted sources are retained rather than silently deleted.
+- **Interrupted attachment recovery:** the Evidence Register can inventory authenticated ciphertext in the active case, then re-register entries missing from current in-memory metadata as **pending**. Original filenames cannot be reconstructed; recovered names are explicitly marked as such.
+- **Document review provenance:** a reviewer identifier, rationale, outcome, timestamp and source SHA-256 are carried into the encrypted case snapshot when the practitioner attaches an analyzed original after entering a valid document-level review. This is **not** a clinical finding verification, SSA decision or immutable audit record.
+- **Safer case transitions:** the UI asks for confirmation before changing the native unlocked vault; it refuses to switch while changes remain unsaved. Backup creation attempts to flush current encrypted edits first.
+- **Source linkage:** interview answers and repeated form rows can select an indexed evidence reference, rather than requiring error-prone handwritten source IDs. Rejected sources are excluded from the selector; pending sources are shown as pending.
+- **Regression gates:** new automated tests cover inventory reconciliation, document-intake mode selection, human-review metadata in draft package shapes, and native encrypted-original verification.
+
+These changes have not completed independent security validation, full official SSA field mapping, secure enterprise roles, an approved SSA signing/submission pathway or signed Windows installers. **Do not treat this section as a declaration that the release is production ready.**
+
 ## Next acceptance milestones (in priority order)
 
 1. **Evidence intake end-to-end:** Open a restricted case; analyze a source; attach the original encrypted blob; verify hash and review status; link reviewed evidence to relevant answers; save; reopen; back up and restore; verify bytes, provenance and rejection of a changed source. Test canceled imports, damaged files and lost/unwritable vaults. Preserve the original; never silently delete it.
