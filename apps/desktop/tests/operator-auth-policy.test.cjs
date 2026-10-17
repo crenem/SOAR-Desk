@@ -33,4 +33,22 @@ assert.match(auth,/Argon2::default\(\)\.hash_password/);
 assert.match(auth,/LOCKOUT_SECONDS/);
 assert.match(auth,/IDLE_SECONDS/);
 assert.match(app,/OperatorGate/);
+const zitadel=fs.readFileSync(path.join(root,"src-tauri/src/zitadel_oidc.rs"),"utf8");
+for(const sourceName of ["begin_zitadel_auth","zitadel_auth_progress","complete_zitadel_auth","configure_zitadel"]){
+ assert.ok(api.includes("zitadel_oidc::"+sourceName),"Missing OIDC native route: "+sourceName);
+}
+for(const control of [
+ "PkceCodeChallenge::new_random_sha256",
+ "CsrfToken::new_random","Nonce::new_random",
+ "token.claims(&verifier",
+ "claims.subject().as_str()",
+ "valid_issuer(", "127.0.0.1:8765",
+ "state.as_deref()!=Some(expected_state)",
+ "link_oidc_identity","login_linked_oidc"
+]){
+ assert.ok(zitadel.includes(control),"Missing ZITADEL security control: "+control);
+}
+assert.ok(auth.includes("oidc_links"),"Missing stable linked identities");
+assert.ok(auth.includes("profile_id"),"Missing immutable local profile ID");
+assert.ok(auth.includes("!stored.oidc_links.iter().any"),"Unlinked identities must be refused");
 console.log("Native operator access gates and Argon2id enrollment wiring passed.");
