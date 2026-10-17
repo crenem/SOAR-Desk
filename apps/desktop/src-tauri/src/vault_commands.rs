@@ -112,6 +112,54 @@ fn source_document(path:&str)->Result<Vec<u8>,String>{
     if bytes.len()>MAX_DOCUMENT_BYTES{return Err("Document exceeds encrypted attachment limit.".into())}
     Ok(bytes)
 }
+
+/* Verify a source against its claimed SHA-256, size, and case-authenticated
+ * ciphertext. Never trust the unencrypted register metadata by itself. */
+fn verified_blob(
+    vault:&Path,session:&UnlockedSession,id:&str,sha256:&str,expected_bytes:u64
+)->Result<(),String>{
+    if sha256.len()!=64 || !sha256.bytes().all(|c|c.is_ascii_hexdigit()) {
+        return Err("Encrypted evidence metadata has an invalid SHA-256.".into());
+    }
+    let path=blob_path(vault,id)?;
+    let meta=fs::symlink_metadata(&path)
+        .map_err(|_|"Referenced encrypted evidence is missing; backup refused.".to_string())?;
+    if !meta.file_type().is_file() || meta.len()==0 ||
+        meta.len()>MAX_DOCUMENT_ENVELOPE_BYTES as u64 {
+        return Err("Referenced encrypted evidence is not a bounded regular file.".into());
+    }
+    let bytes=fs::read(&path).map_err(|_|"Cannot read referenced encrypted evidence.".to_string())?;
+    let decrypted=error_message(session.decrypt_document(&bytes,id))?;
+    if decrypted.len() as u64 != expected_bytes ||
+       format!("{:x}",Sha256::digest(&*decrypted)) != sha256.to_ascii_lowercase() {
+        return Err("Referenced evidence content differs from its saved size or SHA-256; backup refused.".into());
+    }
+    Ok(())
+}
+
+/* The encrypted snapshot is authoritative: verify all its registered originals
+ * before making a backup. Orphan blobs are still copied for possible recovery
+ * after an interrupted attachment, but never mistaken for indexed evidence. */
+fn verify_snapshot_blobs(vault:&Path,sealed:&[u8],practitioner:&str)->Result<usize,String>{
+    let (plaintext,session)=error_message(unlock_for_autosave(sealed,practitioner))?;
+    let snapshot:serde_json::Value=serde_json::from_slice(&plaintext)
+        .map_err(|_|"Cannot parse decrypted case for evidence verification.".to_string())?;
+    let entries=snapshot.get("evidence").and_then(|v|v.as_array())
+        .ok_or("Encrypted case is missing its evidence register.")?;
+    let mut found=std::collections::HashSet::new();
+    for entry in entries {
+        let Some(id)=entry.get("blobId").and_then(|v|v.as_str()) else {continue};
+        if !found.insert(id.to_string()) {
+            return Err("Multiple evidence entries reference the same encrypted source ID.".into());
+        }
+        let sha=entry.get("sha256").and_then(|v|v.as_str())
+            .ok_or("Attached source is missing its expected SHA-256.")?;
+        let len=entry.get("bytes").and_then(|v|v.as_u64())
+            .ok_or("Attached source is missing its expected byte count.")?;
+        verified_blob(vault,&session,id,sha,len)?;
+    }
+    Ok(found.len())
+}
 #[derive(Deserialize)]
 pub struct AttachEvidenceRequest{
     source_path:String,
@@ -191,6 +239,34 @@ pub fn export_evidence_document(request:ExportEvidenceRequest)->Result<String,St
         return Err("Export destination must have a supported document extension.".into());
     }
     new_encrypted_file(&request.output_path,&ext,&plaintext)
+}
+
+
+#[derive(Deserialize)]
+pub struct VerifyEvidenceRequest {
+    case_reference:String,
+    blob_id:String,
+    expected_sha256:String,
+    expected_bytes:u64,
+}
+#[derive(Serialize)]
+pub struct VerifiedEvidence {
+    pub blob_id:String,
+    pub authenticated:bool,
+    pub sha256_matched:bool,
+    pub bytes_matched:bool,
+}
+#[tauri::command]
+pub fn verify_attached_evidence(request:VerifyEvidenceRequest)->Result<VerifiedEvidence,String>{
+    let guard=active().lock().map_err(|_|"Vault lock unavailable.")?;
+    let current=guard.as_ref().ok_or("Unlock this case vault before checking original evidence.")?;
+    if current.session.case_reference()!=request.case_reference {
+        return Err("Evidence verification refused: the active vault belongs to another case.".into());
+    }
+    verified_blob(&current.path,&current.session,&request.blob_id,
+                  &request.expected_sha256,request.expected_bytes)?;
+    Ok(VerifiedEvidence{blob_id:request.blob_id,
+        authenticated:true,sha256_matched:true,bytes_matched:true})
 }
 
 #[derive(Deserialize)]
@@ -450,6 +526,7 @@ pub fn backup_synthetic_vault(
     let sealed = read_encrypted(&request.input_path)?;
     let synthetic=validate_sealed_access(&sealed,request.synthetic_confirmed,request.local_risk_acknowledged)?;
     error_message(authenticate_backup(&sealed, &passphrase))?;
+    let verified_count=verify_snapshot_blobs(Path::new(&request.input_path),&sealed,&passphrase)?;
     let output=filename_target(&request.output_path,&["soarbackup"])?;
     if output.exists()||blob_folder(&output).exists(){
         return Err("Backup destination must not exist.".into());
@@ -469,7 +546,7 @@ pub fn backup_synthetic_vault(
         path,
         encrypted: true,
         synthetic_only: synthetic,
-        note: "Exact encrypted case snapshot and accompanying encrypted evidence blobs, if any; restore must include both files and the .blobs folder.".into(),
+        note: format!("Encrypted snapshot and attachments copied; {verified_count} registered original(s) authenticated against stored case metadata. Keep the .blobs folder alongside this backup."),
     })
 }
 #[tauri::command]
