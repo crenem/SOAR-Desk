@@ -26,16 +26,24 @@ if [[ "${SOAR_LAUNCH_UPDATED:-0}" != 1 ]]; then
   SOAR_LAUNCH_UPDATED=1 exec bash "$ROOT/scripts/launch-wsl.sh"
 fi
 
+need_system_packages=0
 for program in git curl cmake gcc pkg-config tesseract pdftotext pdftoppm; do
-  if ! command -v "$program" >/dev/null 2>&1; then
-    echo "Missing system dependencies; Ubuntu may request sudo password."
-    sudo apt-get update
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-      git curl ca-certificates cmake build-essential pkg-config libcurl4-openssl-dev \
-      poppler-utils tesseract-ocr tesseract-ocr-eng python3-venv
-    break
-  fi
+  if ! command -v "$program" >/dev/null 2>&1; then need_system_packages=1; fi
 done
+if command -v pkg-config >/dev/null 2>&1; then
+  for library in webkit2gtk-4.1 ayatana-appindicator3-0.1; do
+    if ! pkg-config --exists "$library"; then need_system_packages=1; fi
+  done
+fi
+if ((need_system_packages)); then
+  echo "Installing missing Ubuntu build, OCR and desktop UI prerequisites."
+  sudo apt-get update
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    git curl ca-certificates cmake build-essential pkg-config libcurl4-openssl-dev \
+    libssl-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+    librsvg2-dev libxdo-dev libgtk-3-dev \
+    poppler-utils tesseract-ocr tesseract-ocr-eng python3-venv
+fi
 
 # NVM is needed when opening WSL noninteractively from a Windows shortcut.
 export NVM_DIR="$HOME/.nvm"
