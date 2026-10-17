@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { extractMetadata, type MetadataCandidate, type MetadataCategory } from "./metadata";
 import { reviewedSuggestions,type PrefillSuggestion } from "./document-prefill";
 import type {AttachedSource} from "./evidence-attachment";
+import type {DocumentReviewRecord} from "./application-package";
 import {analysisMode} from "./document-intake-policy";
 
 type Page = { page: number; text: string; method: string; warning: string | null };
@@ -62,7 +63,7 @@ function summarise(parts: Segment[]) {
     functional:scored.length ? "Functional-evidence signals available for review; verify each against source passages." : "No reliable functional-evidence classification available.",
     status: parts.length && complete.length === parts.length && ordered.length > 0 ? "Ready for human review" : "Incomplete — review required"};
 }
-export default function Documents({caseReference,syntheticOnly,onPrefill,onEvidenceAttached}:{caseReference:string;syntheticOnly:boolean;onPrefill:(items:PrefillSuggestion[],caseReference:string)=>void;onEvidenceAttached:(source:AttachedSource,caseReference:string)=>void}) {
+export default function Documents({caseReference,syntheticOnly,onPrefill,onEvidenceAttached}:{caseReference:string;syntheticOnly:boolean;onPrefill:(items:PrefillSuggestion[],caseReference:string)=>void;onEvidenceAttached:(source:AttachedSource,caseReference:string,review?:DocumentReviewRecord)=>void}) {
   const [confirmed,setConfirmed] = useState(false);
   const [path,setPath] = useState("");
   const [documentCase,setDocumentCase]=useState("");
@@ -139,7 +140,12 @@ export default function Documents({caseReference,syntheticOnly,onPrefill,onEvide
         source_path:path,case_reference:caseReference,expected_sha256:document.sha256,
         ...analysisMode(syntheticOnly)
       }});
-      onEvidenceAttached(attached,caseReference);
+      const humanReview:DocumentReviewRecord|undefined=
+        review!=="PendingHumanReview" && !!reviewer.trim() && !!rationale.trim()
+        ? {outcome:review,reviewerId:reviewer.trim(),rationale:rationale.trim(),
+           recordedAt:new Date().toISOString(),documentSha256:document.sha256}
+        : undefined;
+      onEvidenceAttached(attached,caseReference,humanReview);
     }catch(e){setError("Encrypted attachment could not be created: "+String(e));}
     finally{setBusy(false);}
   }
@@ -256,9 +262,9 @@ export default function Documents({caseReference,syntheticOnly,onPrefill,onEvide
           <option value="Rejected">Reject proposed interpretation</option>
           <option value="NeedsMoreEvidence">Needs additional evidence or correction</option>
         </select></label>
-        <label>Fictitious reviewer identifier<input value={reviewer} onChange={e=>setReviewer(e.target.value)} disabled={busy}/></label>
+        <label>{syntheticOnly?"Fictitious reviewer identifier":"Authorized reviewer identifier"}<input value={reviewer} onChange={e=>setReviewer(e.target.value)} disabled={busy}/></label>
         <label>Rationale<textarea rows={3} value={rationale} onChange={e=>setRationale(e.target.value)} disabled={busy} placeholder="Record what was verified and what remains uncertain."/></label>
-        {readyToReview && <p className="success" role="status">Review fields completed in this session. No approval has been saved or signed; production audit controls are not implemented.</p>}
+        {readyToReview && <p className="success" role="status">Document-level review will be recorded with the encrypted source when you attach it, then persisted by case autosave. This is not an SSA approval or individual clinical finding verification.</p>}
       </section>
     </>}
   </section>;
