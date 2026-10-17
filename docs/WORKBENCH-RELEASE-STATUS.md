@@ -15,7 +15,7 @@ Updated October 16, 2026. **Restricted development beta; not approved for live n
 | Exports | Verified-edition SSA-16 unsigned incomplete PDF draft and explicit plaintext evidence export | Not a completed SSA filing; plaintext exports require authorized protected handling |
 | Submissions | Manual status and receipt log | No SSA submission service or independent receipt verification |
 
-Current integration smoke tests and operational cautions: [Usability and release checklist](USABILITY-AND-RELEASE-CHECKLIST.md). Architecture: [Production vault decision](PRODUCTION-VAULT-ADR.md). Official form constraints: [SSA integration boundary](SSA-INTEGRATION-BOUNDARY.md).
+Windows x86-64 / CUDA synthetic release exercise: [release acceptance](RELEASE-ACCEPTANCE-WINDOWS-CUDA.md). Current integration smoke tests and operational cautions: [Usability and release checklist](USABILITY-AND-RELEASE-CHECKLIST.md). Architecture: [Production vault decision](PRODUCTION-VAULT-ADR.md). Official form constraints: [SSA integration boundary](SSA-INTEGRATION-BOUNDARY.md).
 
 ## October 16 development pass — evidence and case-safety improvements
 
@@ -27,6 +27,7 @@ The following changes have been committed to the development branch:
 - **Safer case transitions:** the UI asks for confirmation before changing the native unlocked vault; it refuses to switch while changes remain unsaved. Backup creation attempts to flush current encrypted edits first.
 - **Source linkage:** interview answers and repeated form rows can select an indexed evidence reference, rather than requiring error-prone handwritten source IDs. Rejected sources are excluded from the selector; pending sources are shown as pending.
 - **Regression gates:** new automated tests cover inventory reconciliation, document-intake mode selection, human-review metadata in draft package shapes, and native encrypted-original verification.
+- **OCR scratch:** restricted Linux/WSL2 document processing now requires a verified `/dev/shm` tmpfs directory for temporary source copies and raster images. This is an improvement, **not** a PHI security certification: tmpfs may be paged to swap and external tools still require full threat review.
 
 These changes have not completed independent security validation, full official SSA field mapping, secure enterprise roles, an approved SSA signing/submission pathway or signed Windows installers. **Do not treat this section as a declaration that the release is production ready.**
 
