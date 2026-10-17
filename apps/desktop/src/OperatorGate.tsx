@@ -1,11 +1,12 @@
 import {useCallback,useEffect,useState,type ReactNode,type FormEvent} from "react";
 import {invoke} from "@tauri-apps/api/core";
 import WindowChrome from "./WindowChrome";
+import ZitadelIdentity from "./ZitadelIdentity";
 
 type OperatorStatus={
- enrolled:boolean;authenticated:boolean;username:string|null;idle_seconds:number;
+ enrolled:boolean;authenticated:boolean;username:string|null;profile_id:string|null;zitadel_linked:boolean;idle_seconds:number;
 };
-type Props={children:(operator:string,lock:()=>void)=>ReactNode};
+type Props={children:(operator:string,lock:()=>void,linked:boolean,profileId:string|null,onLinked:(status:OperatorStatus)=>void)=>ReactNode};
 
 /** A native-backed UI gate; Rust protects IPC independently of this screen.
  * Case passphrases remain separate from the operator's sign-in password. */
@@ -54,7 +55,7 @@ export default function OperatorGate({children}:Props){
    }catch(e){setError("Unable to lock native case access: "+String(e));await refresh();}
  }
  if(session?.authenticated){
-   return <>{children(session.username??"Operator",()=>{void lock();})}</>;
+   return <>{children(session.username??"Operator",()=>{void lock();},session.zitadel_linked,session.profile_id,s=>setSession(s))}</>;
  }
  return <div className="desktop-frame">
   <WindowChrome/>
@@ -84,6 +85,7 @@ export default function OperatorGate({children}:Props){
      </label>}
      <button className="primary" type="submit" disabled={busy}>{busy?"Working…":session.enrolled?"Sign in":"Create local operator"}</button>
     </form>}
+    {session?.enrolled&&<ZitadelIdentity mode="login" linked={session.zitadel_linked} onSuccess={s=>{setSession(s);setError("");}}/>}
     {error&&<p role="alert" className="error">{error}</p>}
     <p className="hint">Native case commands require authentication and lock after 15 minutes without case activity. A passkey/Windows Hello unlock is not yet enabled in this WSL2 build. This is not an organizational identity or PHI compliance certification.</p>
    </section>
