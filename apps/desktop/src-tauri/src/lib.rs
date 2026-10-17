@@ -1,4 +1,5 @@
 mod vault_commands;
+mod operator_auth;
 mod ssa_template_commands;
 
 use serde::Deserialize;
@@ -140,6 +141,7 @@ struct UiRecommendation {
 
 #[tauri::command]
 fn evaluate_screen(screen: UiScreen) -> Result<UiRecommendation, String> {
+    operator_auth::require_operator()?;
     let result = AdultReferralScreen::from(screen)
         .recommend()
         .map_err(|error| format!("Screening evidence needs correction: {error:?}"))?;
@@ -166,6 +168,7 @@ struct UiReview {
 }
 #[tauri::command]
 fn validate_human_review(review: UiReview) -> Result<(), String> {
+    operator_auth::require_operator()?;
     let decision = match review.decision {
         UiDecision::AcceptForIntake => ServiceDecision::AcceptForIntake,
         UiDecision::RequestMoreEvidence => ServiceDecision::RequestMoreEvidence,
@@ -190,6 +193,7 @@ struct DocumentRequest {
 }
 #[tauri::command]
 fn extract_synthetic_document(request: DocumentRequest) -> Result<soar_documents::ExtractedDocument, String> {
+    operator_auth::require_operator()?;
     local_case_review_ack(request.synthetic_confirmed,request.local_risk_acknowledged)?;
     soar_documents::extract_with_mode(std::path::Path::new(&request.path),!request.synthetic_confirmed)
 }
@@ -203,6 +207,7 @@ struct ClassifyRequest {
 }
 #[tauri::command]
 fn classify_synthetic_text(request: ClassifyRequest) -> Result<serde_json::Value, String> {
+    operator_auth::require_operator()?;
     use std::{io::Write, process::{Command, Stdio}};
     local_case_review_ack(request.synthetic_confirmed,request.local_risk_acknowledged)?;
     if request.text.len() > 80_000 { return Err("Text exceeds development limit".into()); }
@@ -230,6 +235,7 @@ struct QwenRequest {
 }
 #[tauri::command]
 fn extract_qwen_candidates(request: QwenRequest) -> Result<serde_json::Value, String> {
+    operator_auth::require_operator()?;
     use std::{io::Write, process::{Command, Stdio}};
     local_case_review_ack(request.synthetic_confirmed,request.local_risk_acknowledged)?;
     if request.text.is_empty() || request.text.len() > 5000 { return Err("Qwen passage must contain 1–5,000 characters".into()); }
@@ -292,6 +298,7 @@ fn validate_draft_json(content: &str) -> Result<(), String> {
 
 #[tauri::command]
 fn export_synthetic_draft(request: SyntheticDraftRequest) -> Result<String, String> {
+    operator_auth::require_operator()?;
     use std::{fs::OpenOptions, io::Write, path::Path};
     if !request.synthetic_confirmed {
         return Err("Explicit fictional-data confirmation is required".into());
@@ -360,10 +367,12 @@ struct SyntheticPdfRequest {
 }
 #[tauri::command]
 fn export_synthetic_ssa16_pdf(request: SyntheticPdfRequest) -> Result<serde_json::Value, String> {
+    operator_auth::require_operator()?;
     render_ssa16_review_pdf(request,true)
 }
 #[tauri::command]
 fn export_local_ssa16_working_pdf(request: SyntheticPdfRequest) -> Result<serde_json::Value, String> {
+    operator_auth::require_operator()?;
     render_ssa16_review_pdf(request,false)
 }
 fn render_ssa16_review_pdf(request: SyntheticPdfRequest,training:bool) -> Result<serde_json::Value, String> {
@@ -446,7 +455,7 @@ fn render_ssa16_review_pdf(request: SyntheticPdfRequest,training:bool) -> Result
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text, extract_qwen_candidates, export_synthetic_draft, export_synthetic_ssa16_pdf, export_local_ssa16_working_pdf, vault_commands::create_synthetic_vault, vault_commands::open_synthetic_vault, vault_commands::backup_synthetic_vault, vault_commands::recover_synthetic_vault, vault_commands::autosave_synthetic_case, vault_commands::synthetic_autosave_status, vault_commands::lock_synthetic_autosave, vault_commands::attach_evidence_document, vault_commands::verify_attached_evidence, vault_commands::list_case_evidence, vault_commands::export_evidence_document, ssa_template_commands::ssa16_template_status, ssa_template_commands::install_ssa16_template])
+        .invoke_handler(tauri::generate_handler![operator_auth::operator_status, operator_auth::enroll_operator, operator_auth::login_operator, operator_auth::logout_operator, evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text, extract_qwen_candidates, export_synthetic_draft, export_synthetic_ssa16_pdf, export_local_ssa16_working_pdf, vault_commands::create_synthetic_vault, vault_commands::open_synthetic_vault, vault_commands::backup_synthetic_vault, vault_commands::recover_synthetic_vault, vault_commands::autosave_synthetic_case, vault_commands::synthetic_autosave_status, vault_commands::lock_synthetic_autosave, vault_commands::attach_evidence_document, vault_commands::verify_attached_evidence, vault_commands::list_case_evidence, vault_commands::export_evidence_document, ssa_template_commands::ssa16_template_status, ssa_template_commands::install_ssa16_template])
         .run(tauri::generate_context!())
         .expect("error starting SOAR Desk");
 }
