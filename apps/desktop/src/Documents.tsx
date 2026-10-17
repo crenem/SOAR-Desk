@@ -189,7 +189,7 @@ export default function Documents({caseReference,syntheticOnly,onPrefill,onEvide
       <section className="review">
         <h2>Qwen3 4B · Proposed clinical evidence summary</h2>
         <p className="muted">Locally generated, unverified and source-linked. The model must not decide SSI/SSDI eligibility. A quotation match is a basic safeguard, not proof the interpretation is accurate.</p>
-        <p><strong>Inference backend:</strong> {inferenceBackends.length ? inferenceBackends.map(b=>b==="npu"?"Windows GenieX (NPU-capable)":"Ubuntu llama.cpp (CPU)").join(", ") : (busy ? "Waiting for Qwen…" : "Not available")}</p>
+        <p><strong>Inference backend:</strong> {inferenceBackends.length ? inferenceBackends.map(b=>b==="npu"?"Windows GenieX (NPU-capable)":"Ubuntu llama.cpp (local; CUDA if enabled)").join(", ") : (busy ? "Waiting for Qwen…" : "Not available")}</p>
         <p><strong>{qwenFindings.length}</strong> proposed clinical findings · <strong>{qwenFailures}</strong> inference errors.</p>
         {qwen.filter(s=>s.error).map(s=><p key={`${s.page}-${s.index}`} role="alert" className="error">Page {s.page}, passage {s.index}: {s.error}</p>)}
         {qwen.length===0 && <p>{busy ? "Waiting for the Laya stage to complete…" : "Qwen results not available. Start the local llama.cpp server; see docs/QWEN-LOCAL.md."}</p>}
