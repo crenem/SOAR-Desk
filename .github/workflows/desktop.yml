@@ -23,6 +23,7 @@ jobs:
       - run: npm run test:fields
       - run: npm run test:intake
       - run: npm run test:evidence
+      - run: npm run test:auth
       - run: npm run test:package
       - uses: actions/setup-python@v5
         with:
