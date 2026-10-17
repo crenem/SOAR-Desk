@@ -39,6 +39,8 @@ Prerequisites: NVIDIA Windows driver/WSL GPU access, a CUDA toolkit containing `
 
 For enrollment, password storage, lock behavior and future passkey limitations, see [local operator access](docs/OPERATOR-ACCESS.md).
 
+Optional **ZITADEL federated sign-in** is available through native OIDC Authorization Code + PKCE, verified signed ID tokens, and explicit linking to the existing single-operator SOAR profile. Configure an approved ZITADEL **Native** application in **Profile & ZITADEL**. The local password continues working offline, and a linked external identity never unlocks the independent encrypted case keys. Setup: [ZITADEL Native app and account linking](docs/ZITADEL-SETUP.md). ZITADEL cloud tenancy and OIDC registration are not provisioned by this repository.
+
 ## Development checks
 
 ```bash
