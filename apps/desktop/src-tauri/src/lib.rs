@@ -191,7 +191,7 @@ struct DocumentRequest {
 #[tauri::command]
 fn extract_synthetic_document(request: DocumentRequest) -> Result<soar_documents::ExtractedDocument, String> {
     local_case_review_ack(request.synthetic_confirmed,request.local_risk_acknowledged)?;
-    soar_documents::extract(std::path::Path::new(&request.path))
+    soar_documents::extract_with_mode(std::path::Path::new(&request.path),!request.synthetic_confirmed)
 }
 
 #[derive(Deserialize)]
