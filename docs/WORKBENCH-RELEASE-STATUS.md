@@ -31,6 +31,12 @@ The following changes have been committed to the development branch:
 
 These changes have not completed independent security validation, full official SSA field mapping, secure enterprise roles, an approved SSA signing/submission pathway or signed Windows installers. **Do not treat this section as a declaration that the release is production ready.**
 
+## Local operator access gate (October 16)
+
+A separate local sign-in was implemented for the Ubuntu/WSL2 desktop process: initial operator enrollment, Argon2id salted password verifier, 15-minute inactivity lock, explicit Lock action, unmounting the React workbench on lock, and native IPC authorization checks for encrypted cases and document processing. The sign-in does **not** replace case encryption or the nonprofit's independent case-recovery passphrase.
+
+Limitations: one local operator per Linux OS account, no multiuser roles or device-trusted Windows Hello/FIDO2 passkey yet, no independent audit, no production credential-recovery or organizational identity controls. Stored source originals or exported plaintext PDF documents outside the encrypted vault are **not** protected by this gate. See [operator access security model](OPERATOR-ACCESS.md).
+
 ## Next acceptance milestones (in priority order)
 
 1. **Evidence intake end-to-end:** Open a restricted case; analyze a source; attach the original encrypted blob; verify hash and review status; link reviewed evidence to relevant answers; save; reopen; back up and restore; verify bytes, provenance and rejection of a changed source. Test canceled imports, damaged files and lost/unwritable vaults. Preserve the original; never silently delete it.
