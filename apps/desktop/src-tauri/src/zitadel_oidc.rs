@@ -4,7 +4,7 @@
 use openidconnect::{
     core::{CoreAuthenticationFlow,CoreClient,CoreProviderMetadata},
     reqwest,AccessTokenHash,AuthorizationCode,ClientId,CsrfToken,IssuerUrl,
-    Nonce,PkceCodeChallenge,PkceCodeVerifier,RedirectUrl,Scope,TokenResponse,
+    Nonce,PkceCodeChallenge,PkceCodeVerifier,RedirectUrl,Scope,TokenResponse,OAuth2TokenResponse,
 };
 use serde::{Deserialize,Serialize};
 use std::{
