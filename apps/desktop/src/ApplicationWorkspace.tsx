@@ -175,9 +175,9 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
  // Restart interval only when the selected vault changes.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[activeVault]);
- function vaultReady(path:string|null){
+ function vaultReady(path:string|null,restored?:PackageInput){
    setActiveVault(path);
-   lastSaved.current=path?JSON.stringify(snapshotRef.current):"";
+   lastSaved.current=path?JSON.stringify(restored??snapshotRef.current):"";
    setAutosaveState(path?"Encrypted case open · autosave every 10 seconds":
       "No writable case vault open. Create or unlock a .soarvault.");
  }
