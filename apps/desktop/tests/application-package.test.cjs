@@ -67,4 +67,17 @@ const withLog=pkg.buildDraftPackage({...input,submissions:activity});
 assert.equal(withLog.summary.manual_submissions,1);
 assert.equal(withLog.summary.external_receipts_reported_verified,0);
 assert.ok(!withLog.submission_log.records[0].receipt);
+const humanDocumentReview={
+ outcome:"NeedsMoreEvidence",
+ reviewerId:"SYN-REVIEWER",
+ rationale:"Fictional source needs confirmation against the original scan.",
+ recordedAt:"2026-10-16T21:00:00.000Z",
+ documentSha256:"a".repeat(64)
+};
+const withDocumentReview=pkg.buildDraftPackage({...input,
+ evidence:[{...input.evidence[0],documentReview:humanDocumentReview}]
+});
+assert.equal(withDocumentReview.evidence_register[0].documentReview.outcome,"NeedsMoreEvidence");
+assert.equal(withDocumentReview.evidence_register[0].documentReview.documentSha256,"a".repeat(64));
+assert.equal(withDocumentReview.summary.ready_for_ssa_submission,false);
 console.log("Synthetic draft package and evidence crosswalk tests passed.");
