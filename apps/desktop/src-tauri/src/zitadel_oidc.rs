@@ -305,7 +305,23 @@ mod tests{
     }
     #[test]
     fn loopback_callback_rejects_untrusted_state(){
-        // The callback parser validates the state before saving any code.
         assert_eq!(REDIRECT,"http://127.0.0.1:8765/callback");
+        fn check(request:&str,state:&str)->Option<Result<String,String>>{
+            let server=TcpListener::bind("127.0.0.1:0").unwrap();
+            let addr=server.local_addr().unwrap();
+            let request=request.to_string();
+            let sender=thread::spawn(move||{
+                let mut stream=TcpStream::connect(addr).unwrap();
+                stream.write_all(request.as_bytes()).unwrap();
+            });
+            let (conn,_)=server.accept().unwrap();
+            let result=callback_message(conn,state);
+            sender.join().unwrap();
+            result
+        }
+        assert!(check("GET /callback?state=wrong&code=stolen HTTP/1.1\r\nHost: localhost\r\n\r\n","expected").is_none());
+        assert!(check("GET /wrong?state=ok&code=value HTTP/1.1\r\nHost: localhost\r\n\r\n","ok").is_none());
+        assert_eq!(check("GET /callback?state=ok&code=one HTTP/1.1\r\nHost: localhost\r\n\r\n","ok").unwrap().unwrap(),"one");
+        assert!(check("GET /callback?state=ok&code=one&code=two HTTP/1.1\r\nHost: localhost\r\n\r\n","ok").is_none());
     }
 }
