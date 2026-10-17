@@ -14,6 +14,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Validate Windows WSL launcher syntax
+        run: bash -n ../../scripts/launch-wsl.sh ../../scripts/launch-wsl-cuda.sh
       - run: npm install --no-audit --no-fund
       - run: npm run test:forms
       - run: npm run test:submissions
