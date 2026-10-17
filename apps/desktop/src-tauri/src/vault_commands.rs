@@ -698,6 +698,7 @@ mod tests {
             synthetic_confirmed:true,local_risk_acknowledged:false
         }).unwrap();
         assert_eq!(attached.bytes,std::fs::metadata(&src).unwrap().len());
+        assert!(verify_attached_evidence(VerifyEvidenceRequest{case_reference:case_id.into(),blob_id:attached.blob_id.clone(),expected_sha256:attached.sha256.clone(),expected_bytes:attached.bytes}).is_ok());
         let sealed=std::fs::read(&attached.encrypted_path).unwrap();
         assert!(!String::from_utf8_lossy(&sealed).contains("FICTIONAL MEDICAL RECORD ONLY"));
         assert!(export_evidence_document(ExportEvidenceRequest{
