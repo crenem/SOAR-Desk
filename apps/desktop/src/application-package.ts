@@ -93,6 +93,20 @@ export function checkEvidence(evidence:EvidenceReference[],syntheticOnly=true):v
     if(ids.has(item.id))throw Error("Duplicate evidence ID: "+item.id);
     ids.add(item.id);
     if(!item.title.trim())throw Error("Evidence "+item.id+" needs a descriptive title.");
+    if(item.blobId&&(!/^[a-f0-9]{32}$/i.test(item.blobId)||
+       !/^[a-f0-9]{64}$/i.test(item.sha256??"")||
+       !Number.isSafeInteger(item.bytes)||!(item.bytes!>0))){
+      throw Error("Attached encrypted evidence needs a valid blob ID, digest and positive byte count: "+item.id);
+    }
+    if(item.documentReview){
+      const review=item.documentReview;
+      if(!item.blobId||!item.sha256||
+         review.documentSha256.toLowerCase()!==item.sha256.toLowerCase()||
+         review.reviewerId.trim().length<3||review.rationale.trim().length<12||
+         !Number.isFinite(Date.parse(review.recordedAt))){
+        throw Error("Document-level review provenance is incomplete or refers to another source: "+item.id);
+      }
+    }
     if(item.status==="human_verified"&&!item.reviewer.trim())throw Error("A human reviewer code is needed for verified evidence "+item.id);
     if(item.status==="human_verified"&&(!item.location.trim()||!item.note.trim()))
       throw Error("A verified source needs a page/location and a supporting note: "+item.id);
