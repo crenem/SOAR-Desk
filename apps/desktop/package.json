@@ -14,7 +14,8 @@
     "test:fields": "node tests/field-prefill.test.cjs",
     "test:workflow": "node tests/form-navigation-signatures.test.cjs",
     "test:intake": "node tests/document-intake-policy.test.cjs",
-    "test:evidence": "node tests/evidence-recovery.test.cjs"
+    "test:evidence": "node tests/evidence-recovery.test.cjs",
+    "test:auth": "node tests/operator-auth-policy.test.cjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
