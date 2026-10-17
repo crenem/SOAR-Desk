@@ -30,6 +30,12 @@ To enable the SSA-16 PDF working preview, download the original blank SSA-16 (09
 
 The development build should not be confused with a signed Windows installer or a HIPAA-assessed deployment.
 
+## Windows x86-64 with NVIDIA CUDA
+
+For a Windows 11 PC with Ubuntu 24.04 WSL2 and an NVIDIA GPU, run `scripts/create-windows-cuda-shortcut.ps1` from Windows PowerShell. It creates a desktop shortcut named **SOAR Desk - NVIDIA CUDA**, using `scripts/launch-wsl-cuda.sh` instead of the Qualcomm GenieX startup path. The shortcut can clone the repository on its first use. The CUDA launcher builds a GPU-enabled local llama.cpp server and starts the Qwen3 4B model on loopback before launching the existing Tauri workbench.
+
+Prerequisites: NVIDIA Windows driver/WSL GPU access, a CUDA toolkit containing `nvcc` in Ubuntu, and the normal Tauri, Rust, Node, Python and OCR dependencies. The shortcut does not bypass those requirements. A successful model health response does not prove CUDA offloading: verify the llama.cpp output and `nvidia-smi` during synthetic inference. This remains a development beta, not an approved PHI deployment.
+
 ## Development checks
 
 ```bash
