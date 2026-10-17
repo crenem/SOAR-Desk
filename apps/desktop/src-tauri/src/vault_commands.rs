@@ -17,6 +17,15 @@ use std::{
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
+
+/** IPC-only account gate. Native vault unit tests exercise lower-level crypto
+ * directly, while every shipped Tauri command requires a signed-in operator. */
+fn enforce_operator()->Result<(),String>{
+    #[cfg(not(test))]
+    { crate::operator_auth::require_operator() }
+    #[cfg(test)]
+    { Ok(()) }
+}
 struct ActiveVault {
     path: PathBuf,
     expected_cipher_hash: Vec<u8>,
@@ -178,6 +187,7 @@ pub struct AttachedEvidence{
 }
 #[tauri::command]
 pub fn attach_evidence_document(request:AttachEvidenceRequest)->Result<AttachedEvidence,String>{
+    enforce_operator()?;
     let guard=active().lock().map_err(|_|"Vault lock unavailable.")?;
     let active=guard.as_ref().ok_or("Create or unlock a writable encrypted vault before attaching records.")?;
     validate_local_ack(active.synthetic_only,request.synthetic_confirmed,request.local_risk_acknowledged)?;
@@ -217,6 +227,7 @@ pub struct ExportEvidenceRequest{
 }
 #[tauri::command]
 pub fn export_evidence_document(request:ExportEvidenceRequest)->Result<String,String>{
+    enforce_operator()?;
     if !request.acknowledge_plaintext_export{
         return Err("Confirm that this export creates an UNENCRYPTED local copy.".into());
     }
@@ -258,6 +269,7 @@ pub struct VerifiedEvidence {
 }
 #[tauri::command]
 pub fn verify_attached_evidence(request:VerifyEvidenceRequest)->Result<VerifiedEvidence,String>{
+    enforce_operator()?;
     let guard=active().lock().map_err(|_|"Vault lock unavailable.")?;
     let current=guard.as_ref().ok_or("Unlock this case vault before checking original evidence.")?;
     if current.session.case_reference()!=request.case_reference {
@@ -283,6 +295,7 @@ pub struct AvailableEvidence {
 }
 #[tauri::command]
 pub fn list_case_evidence(request:ListEvidenceRequest)->Result<Vec<AvailableEvidence>,String>{
+    enforce_operator()?;
     let guard=active().lock().map_err(|_|"Vault lock unavailable.")?;
     let current=guard.as_ref().ok_or("Unlock the case vault before recovering stored originals.")?;
     if current.session.case_reference()!=request.case_reference {
@@ -320,6 +333,7 @@ pub struct SyntheticAutosaveStatus {
 }
 #[tauri::command]
 pub fn synthetic_autosave_status() -> Result<SyntheticAutosaveStatus, String> {
+    enforce_operator()?;
     let guard = active().lock().map_err(|_| "Vault lock unavailable.")?;
     Ok(SyntheticAutosaveStatus {
         active: guard.is_some(),
@@ -328,6 +342,7 @@ pub fn synthetic_autosave_status() -> Result<SyntheticAutosaveStatus, String> {
 }
 #[tauri::command]
 pub fn autosave_synthetic_case(request: SyntheticAutosaveRequest) -> Result<SyntheticAutosaveStatus, String> {
+    enforce_operator()?;
     let snapshot_mode=request.snapshot.get("synthetic_only").and_then(|v|v.as_bool()).ok_or("Missing mode.")?;
     validate_local_ack(snapshot_mode,request.synthetic_confirmed,request.local_risk_acknowledged)?;
     let snapshot = Zeroizing::new(
@@ -457,6 +472,7 @@ fn error_message<T>(r: Result<T, soar_storage::sealed_vault::VaultCryptoError>) 
 pub fn create_synthetic_vault(
     request: CreateSyntheticVaultRequest,
 ) -> Result<SealedFileResult, String> {
+    enforce_operator()?;
     let synthetic = request.snapshot.get("synthetic_only").and_then(|v|v.as_bool()).ok_or("Missing case mode.")?;
     validate_local_ack(synthetic,request.synthetic_confirmed,request.local_risk_acknowledged)?;
     let practitioner = Zeroizing::new(request.practitioner_passphrase);
@@ -482,6 +498,7 @@ pub fn create_synthetic_vault(
 pub fn open_synthetic_vault(
     request: OpenSyntheticVaultRequest,
 ) -> Result<serde_json::Value, String> {
+    enforce_operator()?;
     let passphrase = Zeroizing::new(request.practitioner_passphrase);
     let sealed = read_encrypted(&request.input_path)?;
     validate_sealed_access(&sealed,request.synthetic_confirmed,request.local_risk_acknowledged)?;
@@ -559,6 +576,7 @@ fn reencrypt_blobs_for_recovery(
 pub fn backup_synthetic_vault(
     request: BackupSyntheticVaultRequest,
 ) -> Result<SealedFileResult, String> {
+    enforce_operator()?;
     let passphrase = Zeroizing::new(request.practitioner_passphrase);
     let sealed = read_encrypted(&request.input_path)?;
     let synthetic=validate_sealed_access(&sealed,request.synthetic_confirmed,request.local_risk_acknowledged)?;
@@ -590,6 +608,7 @@ pub fn backup_synthetic_vault(
 pub fn recover_synthetic_vault(
     request: RecoverSyntheticVaultRequest,
 ) -> Result<SealedFileResult, String> {
+    enforce_operator()?;
     let original = read_encrypted(&request.input_path)?;
     let synthetic=validate_sealed_access(&original,request.synthetic_confirmed,request.local_risk_acknowledged)?;
     let old_recovery = Zeroizing::new(request.old_organization_passphrase);
