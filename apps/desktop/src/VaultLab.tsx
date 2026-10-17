@@ -145,7 +145,7 @@ export default function VaultLab({input,onRestore,onVaultReady,canReplaceCase,be
  return <section className="vault-lab">
   <div className="eyebrow">{isTraining?"ENCRYPTED TRAINING VAULT":"RESTRICTED ENCRYPTED LOCAL CASE · SECURITY REVIEW INCOMPLETE"}</div>
   <h3>Encrypted case file and nonprofit recovery</h3>
-  <p className="muted">Encrypt, reopen, back up, and recover a local case. Uses AES-256-GCM, Argon2id-derived separate practitioner and nonprofit recovery keys. This release still lacks SQLCipher, Windows Hello, authenticated organizational staff permissions, independent audit, encrypted source documents, and completed compliance assessment.</p>
+  <p className="muted">Encrypt, reopen, back up, and recover a local case. Uses AES-256-GCM, Argon2id-derived separate practitioner and nonprofit recovery keys. Original source files can be stored as separate case-authenticated encrypted blobs and included in backups. This release still lacks SQLCipher, Windows Hello, authenticated organizational staff permissions, independently anchored audit logs, and completed security/compliance assessment.</p>
   <div className="intake-tabs" role="group" aria-label="Vault operations">
    {(["create","open","backup","recover"] as Mode[]).map(m=><button type="button" key={m}
      className={mode===m?"active":""} onClick={()=>{setMode(m);clearSecrets();setError("");setFeedback("");}}>
