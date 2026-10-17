@@ -762,6 +762,25 @@ mod tests {
         let _=std::fs::remove_dir_all(backup_dir);
     }
 
+
+    #[test]
+    fn rejects_backup_with_missing_registered_original() {
+        let case=serde_json::json!({
+          "file_kind":"soar-desk-synthetic-case-snapshot",
+          "schema_version":1,"synthetic_only":true,
+          "case_reference":"SYN-MISSING-SOURCE",
+          "programs":["ssi"],"answers":{},"rows":{},
+          "submissions":{"records":[],"events":[]},
+          "evidence":[{"blobId":"abcdefabcdefabcdefabcdefabcdefab",
+                       "sha256":"a".repeat(64),"bytes":27}]
+        });
+        let operator="fictional-test-operator-passphrase";
+        let custodian="fictional-test-custodian-passphrase";
+        let sealed=seal_local_case(case.to_string().as_bytes(),operator,custodian).unwrap();
+        let absent=std::env::temp_dir().join("soar-nonexistent-attachment-test");
+        assert!(verify_snapshot_blobs(&absent,&sealed,operator).is_err());
+    }
+
     #[test]
     fn end_to_end_create_open_backup_and_organizational_recovery() {
         let _test_guard=vault_test_guard();
