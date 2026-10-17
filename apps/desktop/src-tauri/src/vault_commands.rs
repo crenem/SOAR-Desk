@@ -269,6 +269,43 @@ pub fn verify_attached_evidence(request:VerifyEvidenceRequest)->Result<VerifiedE
         authenticated:true,sha256_matched:true,bytes_matched:true})
 }
 
+
+#[derive(Deserialize)]
+pub struct ListEvidenceRequest {
+    case_reference:String,
+}
+#[derive(Serialize)]
+pub struct AvailableEvidence {
+    pub blob_id:String,
+    pub sha256:String,
+    pub bytes:u64,
+    pub extension:String,
+}
+#[tauri::command]
+pub fn list_case_evidence(request:ListEvidenceRequest)->Result<Vec<AvailableEvidence>,String>{
+    let guard=active().lock().map_err(|_|"Vault lock unavailable.")?;
+    let current=guard.as_ref().ok_or("Unlock the case vault before recovering stored originals.")?;
+    if current.session.case_reference()!=request.case_reference {
+        return Err("Cannot inspect another case's encrypted evidence.".into());
+    }
+    let files=list_opaque_blobs(&current.path)?;
+    let mut found=Vec::with_capacity(files.len());
+    for (id,path) in files {
+        let sealed=fs::read(&path).map_err(|_|"Could not read encrypted original.".to_string())?;
+        let plaintext=error_message(current.session.decrypt_document(&sealed,&id))?;
+        let ext=if plaintext.starts_with(b"%PDF-") {"pdf"}
+            else if plaintext.starts_with(&[0x89,0x50,0x4e,0x47]) {"png"}
+            else if plaintext.starts_with(&[0xff,0xd8,0xff]) {"jpg"}
+            else if plaintext.starts_with(b"II") || plaintext.starts_with(b"MM") {"tif"}
+            else {"txt"};
+        found.push(AvailableEvidence {
+            blob_id:id,sha256:format!("{:x}",Sha256::digest(&*plaintext)),
+            bytes:plaintext.len() as u64,extension:ext.into()
+        });
+    }
+    found.sort_by(|a,b|a.blob_id.cmp(&b.blob_id));
+    Ok(found)
+}
 #[derive(Deserialize)]
 pub struct SyntheticAutosaveRequest {
     snapshot: serde_json::Value,
