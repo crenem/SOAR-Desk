@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{fs, path::Path, process::Command};
-use tempfile::tempdir;
+use tempfile::{tempdir,Builder,TempDir};
 
 const MAX_BYTES: u64 = 15 * 1024 * 1024;
 const MAX_PAGES: u32 = 25;
@@ -35,15 +35,36 @@ fn identify(bytes: &[u8]) -> Result<&'static str, String> {
     else if bytes.starts_with(b"II*\0") || bytes.starts_with(b"MM\0*") { Ok("tiff") }
     else { Err("Unsupported document signature (PDF, PNG, JPEG, TIFF only)".into()) }
 }
-/// Read text from a synthetic test document. Calling apps MUST enforce a synthetic-only gate.
-/// All temporary images are removed when the function completes.
-pub fn extract(path: &Path) -> Result<ExtractedDocument, String> {
+/// Synthetic preview uses the normal OS temp directory. Restricted local
+/// processing requires verified Linux tmpfs so OCR raster images and copied
+/// source files do not persist in an ordinary /tmp filesystem.
+fn scratch(restricted:bool)->Result<TempDir,String>{
+    if !restricted{return tempdir().map_err(|_|"Cannot create temporary document directory.".into())}
+    #[cfg(target_os="linux")]
+    {
+        let check=Command::new("findmnt").args(["-n","-o","FSTYPE","--target","/dev/shm"])
+            .output().map_err(|_|"Cannot verify memory-backed OCR storage.".to_string())?;
+        if !check.status.success() || String::from_utf8_lossy(&check.stdout).trim()!="tmpfs" {
+            return Err("Restricted document OCR requires a verified /dev/shm tmpfs; no disk-backed fallback is allowed.".into());
+        }
+        Builder::new().prefix("soar-ocr-").tempdir_in("/dev/shm")
+            .map_err(|_|"Cannot create protected memory-backed OCR scratch directory.".into())
+    }
+    #[cfg(not(target_os="linux"))]
+    {
+        Err("Restricted OCR memory-backed scratch is currently supported only on Linux/WSL2.".into())
+    }
+}
+/// Extract with an explicit storage policy. App callers enforce case consent.
+/// Temporary files are deleted on exit; restricted cases also avoid disk scratch.
+pub fn extract_with_mode(path:&Path,restricted_local:bool)->Result<ExtractedDocument,String> {
+
     let metadata = fs::metadata(path).map_err(|e| e.to_string())?;
     if metadata.len() > MAX_BYTES { return Err("Document exceeds 15 MiB limit".into()); }
     let bytes = fs::read(path).map_err(|e| e.to_string())?;
     let kind = identify(&bytes)?;
     let hash = format!("{:x}", Sha256::digest(&bytes));
-    let tmp = tempdir().map_err(|e| e.to_string())?;
+    let tmp = scratch(restricted_local)?;
     let filename = tmp.path().join(format!("input.{kind}"));
     fs::write(&filename, &bytes).map_err(|e| e.to_string())?;
     let input = filename.to_string_lossy().into_owned();
@@ -72,9 +93,13 @@ pub fn extract(path: &Path) -> Result<ExtractedDocument, String> {
         let ocr = run("tesseract", &[&input, "stdout", "-l", "eng"])?;
         pages.push(PageText { page: 1, text: ocr.trim().into(), method: "ocr".into(), warning: None });
     }
-    Ok(ExtractedDocument { document_id: format!("SYN-{}", &hash[..12]), sha256: hash, pages })
+    Ok(ExtractedDocument { document_id: format!("DOC-{}", &hash[..12]), sha256: hash, pages })
 }
 
+/// Backwards-compatible, explicitly synthetic-only entry point.
+pub fn extract(path:&Path)->Result<ExtractedDocument,String>{
+    extract_with_mode(path,false)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
