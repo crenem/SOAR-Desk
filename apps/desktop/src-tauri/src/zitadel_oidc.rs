@@ -235,7 +235,13 @@ pub fn begin_zitadel_auth(request:BeginRequest)->Result<AuthorizationStart,Strin
     let url_string=url.to_string();
     // The system browser (not an embedded WebView) handles credentials and MFA.
     // A visible link is returned even if no browser handler is configured.
+    #[cfg(windows)]
+    let _=std::process::Command::new("rundll32.exe")
+        .arg("url.dll,FileProtocolHandler").arg(&url_string).spawn();
+    #[cfg(target_os="linux")]
     let _=std::process::Command::new("xdg-open").arg(&url_string).spawn();
+    #[cfg(target_os="macos")]
+    let _=std::process::Command::new("open").arg(&url_string).spawn();
     Ok(AuthorizationStart{url:url_string,expires_seconds:TIMEOUT.as_secs()})
 }
 #[tauri::command]
