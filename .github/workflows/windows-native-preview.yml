@@ -1,0 +1,56 @@
+name: Windows native Tauri preview (unsigned)
+
+on:
+  pull_request:
+  push:
+    branches:
+      - feature/windows-native-tauri-preview
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-native-preview:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: npm install --no-audit --no-fund
+      - name: Verify frontend and test fixtures
+        working-directory: apps/desktop
+        shell: pwsh
+        run: |
+          npm run test:workflow
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:forms
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:fields
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:auth
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Compile and test Windows Tauri native bridge
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib
+      - name: Build unsigned Windows NSIS preview
+        working-directory: apps/desktop
+        run: npm run tauri -- build --config src-tauri/tauri.windows.conf.json --bundles nsis
+      - name: Upload unsigned preview installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: soar-desk-windows-x64-unsigned-preview
+          path: apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 7

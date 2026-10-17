@@ -1,0 +1,14 @@
+{
+  "productName": "SOAR Desk Development Preview",
+  "identifier": "org.soardesk.community.windows-preview",
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico"],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    }
+  }
+}
