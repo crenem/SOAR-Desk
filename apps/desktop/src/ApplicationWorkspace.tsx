@@ -333,6 +333,17 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
     {issue&&<small className="field-warning" role="status">{issue}</small>}
    </div>;
  }
+ function evidencePicker(value:string,onPick:(reference:string)=>void){
+  const chosen=evidence.some(item=>item.id===value)?value:"";
+  return <label>Link a registered source
+    <select value={chosen} onChange={event=>{if(event.target.value)onPick(event.target.value)}}>
+      <option value="">Choose an evidence reference…</option>
+      {evidence.filter(item=>item.status!=="rejected").map(item=>
+        <option key={item.id} value={item.id}>{item.id} — {item.title||"Untitled"} ({item.status.replace("_"," ")})</option>
+      )}
+    </select>
+  </label>;
+ }
  function renderQuestion(question:Section["questions"][number]){
   if(!applicable(question,answers))return null;
   const r=answers[question.key]??emptyAnswer();
@@ -349,8 +360,9 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
       {statuses.map(s=><option value={s.value} key={s.value}>{s.label}</option>)}
      </select></label>
      <label>Source reference (if available)<input value={r.source} onChange={e=>change(question.key,{source:e.target.value})} placeholder="Interview, document or evidence reference"/></label>
+     {evidencePicker(r.source,value=>change(question.key,{source:value}))}
     </div>
-    <p className="hint">Verification is a human assertion, not an automated model judgment. To link an indexed source, use an exact SYN-EV-... reference from the Evidence register.</p>
+    <p className="hint">Verification is a human assertion, not an automated model judgment. Select a case evidence reference above or enter descriptive provenance manually. Pending or rejected evidence is not human-verified proof.</p>
    </details>
   </div>;
  }
@@ -374,6 +386,7 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
       {statuses.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
      </select></label>
      <label>Source reference<input value={item._source??""} onChange={e=>setRow(group.key,i,"_source",e.target.value)}/></label>
+     {evidencePicker(item._source??"",value=>setRow(group.key,i,"_source",value))}
     </div>
    </div>)}
    <button type="button" className="secondary" onClick={()=>addRow(group.key)}>Add entry</button>
