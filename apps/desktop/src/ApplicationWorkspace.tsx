@@ -105,10 +105,10 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
      setAutosaveState("Unsaved changes · encrypted autosave due within 10 seconds");
  },[activeVault,currentSnapshot]);
  async function saveEncryptedNow(){
-   if(!activeVault||autosavePending.current)return;
+   if(!activeVault||autosavePending.current)return false;
    const snapshot=snapshotRef.current;
    const signature=JSON.stringify(snapshot);
-   if(signature===lastSaved.current)return;
+   if(signature===lastSaved.current)return true;
    autosavePending.current=true;
    setAutosaveState("Encrypting and saving…");
    try{
@@ -126,8 +126,10 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
      setAutosaveState(signature===JSON.stringify(snapshotRef.current)
        ?"Encrypted · saved "+new Date().toLocaleTimeString()
        :"Encrypted · newer changes waiting for next save");
+     return signature===JSON.stringify(snapshotRef.current);
    }catch(error){
      setAutosaveState("Autosave FAILED — "+String(error));
+     return false;
    }finally{autosavePending.current=false;}
  }
  // Closing the window must not silently abandon edits in the 10-second gap.
@@ -207,7 +209,32 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
  const captured=total.reduce((n,x)=>n+x.p.captured,0);
  const possible=total.reduce((n,x)=>n+x.p.total,0);
  const sections=validCurrent?.sections??[];
+ function hasCaseContent(){
+  const state=snapshotRef.current;
+  return Object.keys(state.answers).length>0 ||
+    Object.values(state.rows).some(group=>group.length>0) ||
+    state.evidence.length>0||state.submissions.records.length>0||
+    state.submissions.events.length>0||(state.signatures?.length??0)>0;
+ }
+ function canReplaceCase(){
+  if(activeVault && JSON.stringify(snapshotRef.current)!==lastSaved.current){
+    window.alert("The current encrypted case has unsaved changes. Click Save now and retry; the active vault was not changed.");
+    return false;
+  }
+  return true;
+ }
+ async function beforeCaseBackup(path:string){
+  if(activeVault===path){
+    const saved=await saveEncryptedNow();
+    if(!saved)window.alert("The current case could not be saved. Backup stopped to avoid an outdated snapshot.");
+    return saved;
+  }
+  if(!canReplaceCase())return false;
+  return true;
+ }
  function newLocalCase(){
+  if(!canReplaceCase())return;
+  if(hasCaseContent()&&!window.confirm("Discard the current in-memory case and start a new one? Save its encrypted vault before proceeding."))return;
   if(!window.confirm("Start a NEW restricted local encrypted case? This development build has NOT passed HIPAA/security deployment review. Do not proceed unless your nonprofit has authorized this installation and accepts responsibility for local protection, backups, incident handling, and SSA form submission."))return;
   setCaseLabel("CASE-"+crypto.randomUUID());
   setSyntheticOnly(false);
@@ -220,7 +247,8 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
   setFormId("SSA-3368-BK");setSection("identity");setVaultMode("create");setView("casefiles");
  }
  function loadSyntheticExample(){
-  if((captured>0||submissionLog.records.length>0||evidence.length>0)&&!window.confirm("Replace current synthetic case answers and CLEAR ALL IN-MEMORY evidence and submission records?"))return;
+  if(!canReplaceCase())return;
+  if(hasCaseContent()&&!window.confirm("Replace the current case with a fictional demonstration? In-memory answers, sources and submission records will be cleared."))return;
   setEvidence([]);
   setRecoveryEvents([]);
   setSignatures([]);
@@ -443,7 +471,7 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
    </section>}
    {view==="evidence"&&<EvidenceRegister evidence={evidence} setEvidence={setEvidence} syntheticOnly={syntheticOnly} caseReference={caseLabel}/>}
    {view==="signatures"&&<SignatureWorkbench formId={formId} caseReference={caseLabel} answers={answers} rows={rows} receipts={signatures} onChange={setSignatures}/>}
-   {view==="package"&&<PackageExport input={currentSnapshot}/>}\n   {view==="casefiles"&&<VaultLab input={currentSnapshot} onRestore={restoreSyntheticCase} onVaultReady={vaultReady} initialMode={vaultMode}/>}
+   {view==="package"&&<PackageExport input={currentSnapshot}/>}\n   {view==="casefiles"&&<VaultLab input={currentSnapshot} onRestore={restoreSyntheticCase} onVaultReady={vaultReady} canReplaceCase={canReplaceCase} beforeBackup={beforeCaseBackup} initialMode={vaultMode}/>}
    <div hidden={view!=="submissions"}><SubmissionTracker log={submissionLog} setLog={setSubmissionLog} caseReference={caseLabel} programs={programs}/></div>
    <p className="hint">Encrypted autosave requires an unlocked writable vault. The application does not file claims or determine eligibility. All signatures here are internal acknowledgments, not SSA-accepted electronic submissions.</p>
   </div>;
