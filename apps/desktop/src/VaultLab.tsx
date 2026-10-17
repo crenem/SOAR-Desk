@@ -5,7 +5,7 @@ import type {PackageInput} from "./application-package";
 
 /** Development-only encrypted case snapshot; not production PHI storage. */
 type Mode="create"|"open"|"backup"|"recover";
-type Props={input:PackageInput;onRestore:(newCase:PackageInput)=>void;onVaultReady?:(path:string|null)=>void;canReplaceCase?:()=>boolean;beforeBackup?:(path:string)=>Promise<boolean>;initialMode?:Mode};
+type Props={input:PackageInput;onRestore:(newCase:PackageInput)=>void;onVaultReady?:(path:string|null,restored?:PackageInput)=>void;canReplaceCase?:()=>boolean;beforeBackup?:(path:string)=>Promise<boolean>;initialMode?:Mode};
 type Saved={path:string;encrypted:boolean;synthetic_only:boolean;note:string};
 const fileFilters=[{name:"Encrypted SOAR training case",extensions:["soarvault","soarbackup"]}];
 const message=(e:unknown)=>e instanceof Error?e.message:String(e);
@@ -98,7 +98,7 @@ export default function VaultLab({input,onRestore,onVaultReady,canReplaceCase,be
          output_path:output,snapshot:snapshot(),practitioner_passphrase:practitioner,
          organization_recovery_passphrase:orgRecovery,...securityArgs}});
        setSelected(result.path);
-       onVaultReady?.(result.path);
+       onVaultReady?.(result.path,input);
        setFeedback("Encrypted case saved: "+result.path+". Separate the organization recovery secret from the practitioner secret. This version is not independently security-certified.");
      }else if(mode==="open"){
        if(!selected)throw Error("Select an encrypted vault or backup.");
@@ -110,7 +110,7 @@ export default function VaultLab({input,onRestore,onVaultReady,canReplaceCase,be
          input_path:selected,practitioner_passphrase:practitioner,...securityArgs}});
        const data=asCase(restored);
        onRestore(data);
-       onVaultReady?.(selected.endsWith(".soarvault")?selected:null);
+       onVaultReady?.(selected.endsWith(".soarvault")?selected:null,data);
        setFeedback("Decrypted and restored case "+data.caseReference+" into this session. This is a local vault unlock, not an organizational login.");
      }else if(mode==="backup"){
        if(!selected)throw Error("Select an encrypted source vault.");
