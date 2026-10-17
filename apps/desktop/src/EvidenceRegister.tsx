@@ -89,6 +89,12 @@ export default function EvidenceRegister({evidence,setEvidence,syntheticOnly=tru
     </select></label>
    </div>
    {e.status==="human_verified"&&<label>Reviewer identifier (required)<input value={e.reviewer} onChange={ev=>change(e.id,{reviewer:ev.target.value})} placeholder="Authorized reviewer code"/></label>}
+   {e.documentReview&&<div className="review" aria-label="Saved document-level review">
+      <strong>Document-wide review: {e.documentReview.outcome}</strong>
+      <p className="muted">Recorded {e.documentReview.recordedAt} by {e.documentReview.reviewerId}. Original SHA-256: {e.documentReview.documentSha256.slice(0,12)}…</p>
+      <p style={{whiteSpace:"pre-wrap"}}>{e.documentReview.rationale}</p>
+      <p className="hint">This records a human document-wide judgment. It does not automatically verify clinical facts or change the evidence review state above.</p>
+    </div>}
    <label>Evidence note, limited to supported facts<textarea rows={2} value={e.note} onChange={ev=>change(e.id,{note:ev.target.value})} placeholder="Describe what the source actually states and what remains uncertain."/></label>
    <div className="actions">
      {!e.blobId?<button type="button" className="secondary" disabled={busy!==null} onClick={()=>void attach(e.id)}>Attach encrypted source…</button>:<>
