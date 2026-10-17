@@ -75,9 +75,13 @@ const humanDocumentReview={
  documentSha256:"a".repeat(64)
 };
 const withDocumentReview=pkg.buildDraftPackage({...input,
- evidence:[{...input.evidence[0],documentReview:humanDocumentReview}]
+ evidence:[{...input.evidence[0],blobId:"b".repeat(32),sha256:"a".repeat(64),bytes:256,originalFilename:"fictional-test.pdf",documentReview:humanDocumentReview}]
 });
 assert.equal(withDocumentReview.evidence_register[0].documentReview.outcome,"NeedsMoreEvidence");
 assert.equal(withDocumentReview.evidence_register[0].documentReview.documentSha256,"a".repeat(64));
 assert.equal(withDocumentReview.summary.ready_for_ssa_submission,false);
+assert.throws(()=>pkg.buildDraftPackage({...input,
+ evidence:[{...input.evidence[0],blobId:"b".repeat(32),sha256:"c".repeat(64),
+ bytes:256,documentReview:humanDocumentReview}]}),/another source/);
+
 console.log("Synthetic draft package and evidence crosswalk tests passed.");
