@@ -34,7 +34,7 @@ The development build should not be confused with a signed Windows installer or 
 
 For a Windows 11 PC with Ubuntu 24.04 WSL2 and an NVIDIA GPU, run `scripts/create-windows-cuda-shortcut.ps1` from Windows PowerShell. It creates a desktop shortcut named **SOAR Desk - NVIDIA CUDA**, using `scripts/launch-wsl-cuda.sh` instead of the Qualcomm GenieX startup path. The shortcut can clone the repository on its first use. The CUDA launcher builds a GPU-enabled local llama.cpp server and starts the Qwen3 4B model on loopback before launching the existing Tauri workbench.
 
-Prerequisites: NVIDIA Windows driver/WSL GPU access, a CUDA toolkit containing `nvcc` in Ubuntu, and the normal Tauri, Rust, Node, Python and OCR dependencies. The shortcut does not bypass those requirements. A successful model health response does not prove CUDA offloading: verify the llama.cpp output and `nvidia-smi` during synthetic inference. This remains a development beta, not an approved PHI deployment.
+Prerequisites: NVIDIA Windows driver/WSL GPU access, a CUDA toolkit containing `nvcc` in Ubuntu, and the normal Tauri, Rust, Node, Python and OCR dependencies. The shortcut does not bypass those requirements. A successful model health response does not prove CUDA offloading: verify the llama.cpp output and `nvidia-smi` during synthetic inference. This remains a development beta, not an approved PHI deployment. Complete a synthetic end-to-end test using the [Windows x86-64 / CUDA release acceptance checklist](docs/RELEASE-ACCEPTANCE-WINDOWS-CUDA.md) before attempting organizational pilot evaluation.
 
 ## Development checks
 
