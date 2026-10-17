@@ -11,10 +11,16 @@ SOAR Desk has a **single operator profile** on each Ubuntu/Linux user account. T
 5. **A case still has its own practitioner encryption passphrase**, which is separate from the operator password. An independent nonprofit recovery passphrase is retained for rekeying a case without granting the custodian routine access. Operator sign-in does not automatically unlock or decrypt case files.
 6. Locking discards unsaved in-memory edits. Use **Save now** and verify the encrypted save status before locking. Reopening after lock requires operator sign-in plus the encrypted case passphrase.
 
+## Optional linked ZITADEL sign-in
+
+The operator profile now has a stable internal UUID and may link a verified ZITADEL OIDC `issuer + sub` to its existing username. Configure an HTTPS issuer and a Native-app client ID under **Profile & ZITADEL**, then authenticate locally before pressing **Link ZITADEL account**. Later, the matching subject may sign in through ZITADEL without entering the local login password, but it still cannot decrypt cases without the separate practitioner passphrase. Login with a different subject, even with a matching display name/email, is refused.
+
+The ZITADEL integration is **not** preconfigured and does not provision your ZITADEL tenant. Browser-based OIDC authentication may involve passkeys at the provider, but no Windows-native passkey is used to release local case encryption keys. See [ZITADEL setup](ZITADEL-SETUP.md).
+
 ## Security model and limitations
 
 - Argon2id **hashes** the operator password. Encryption is applied to case vaults and their authenticated evidence blobs; a password should never be stored using reversible encryption.
-- The local username is an identifier, **not an encryption secret**. Do not put claimant names, SSNs, or private information in it.
+- The local username and SOAR profile UUID are identifiers, **not encryption secrets**. Do not put claimant names, SSNs, or private information in it.
 - The native access gate protects SOAR Desk's case and document operations. It is not a kernel-enforced file-access policy. Anyone controlling the same OS account can attempt filesystem access; per-case encryption is the remaining cryptographic boundary.
 - The enrollment record is deliberately stored outside the repository; deleting/recreating local operator credentials does not decrypt the independently protected case files. It also is not a secure administrative reset or anti-tamper mechanism.
 - The five-failure sign-in delay is **process-local** and resets on restart. It is not a substitute for Windows disk encryption, restricted OS users, encrypted backups, audit logging, EDR and organizational permissions.
