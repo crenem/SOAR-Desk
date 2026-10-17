@@ -106,4 +106,16 @@ mod tests {
     #[test] fn refuses_unknown_bytes() { assert!(identify(b"fake").is_err()); }
     #[test] fn accepts_png_magic() { assert_eq!(identify(&[137,80,78,71,13,10,26,10]).unwrap(), "png"); }
     #[test] fn rejects_missing_file() { assert!(extract(Path::new("/path/not/present/file.pdf")).is_err()); }
+    #[test] fn synthetic_scratch_is_available() {
+        assert!(scratch(false).is_ok());
+    }
+    #[cfg(target_os="linux")]
+    #[test] fn local_scratch_is_verified_tmpfs_or_refused() {
+        if let Ok(directory)=scratch(true) {
+            assert!(directory.path().starts_with("/dev/shm"));
+        } else {
+            // Lack of tmpfs must never trigger an ordinary disk fallback.
+            assert!(scratch(true).is_err());
+        }
+    }
 }
