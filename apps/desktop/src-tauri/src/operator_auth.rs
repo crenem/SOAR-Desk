@@ -61,11 +61,23 @@ fn valid_secret(secret:&str)->bool {
     (16..=256).contains(&secret.len())&&secret.chars().any(|c|!c.is_whitespace())
 }
 pub(crate) fn private_directory()->Result<PathBuf,String>{
-    let home=env::var_os("HOME").ok_or("Cannot locate the operator's home directory.")?;
-    let config=env::var_os("XDG_CONFIG_HOME").map(PathBuf::from)
-        .unwrap_or_else(||PathBuf::from(home).join(".config"));
-    if !config.is_absolute(){return Err("Configuration location must be absolute.".into());}
-    let path=config.join("soar-desk");
+    // The Windows installer uses a new, non-roaming profile. Never redirect or
+    // overwrite the existing Ubuntu/WSL2 operator credential directory.
+    #[cfg(windows)]
+    let path={
+        let base=PathBuf::from(env::var_os("LOCALAPPDATA")
+            .ok_or("Cannot locate the Windows per-user data directory.")?);
+        if !base.is_absolute(){return Err("Windows application data path must be absolute.".into());}
+        base.join("SOAR Desk")
+    };
+    #[cfg(not(windows))]
+    let path={
+        let home=env::var_os("HOME").ok_or("Cannot locate the operator's home directory.")?;
+        let config=env::var_os("XDG_CONFIG_HOME").map(PathBuf::from)
+            .unwrap_or_else(||PathBuf::from(home).join(".config"));
+        if !config.is_absolute(){return Err("Configuration location must be absolute.".into());}
+        config.join("soar-desk")
+    };
     if !path.exists(){fs::create_dir_all(&path).map_err(|_|"Cannot create SOAR Desk account directory.".to_string())?;}
     let meta=fs::symlink_metadata(&path).map_err(|_|"Cannot inspect account directory.".to_string())?;
     if !meta.file_type().is_dir(){return Err("Unsafe SOAR Desk account directory.".into());}

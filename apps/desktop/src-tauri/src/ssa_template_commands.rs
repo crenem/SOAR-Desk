@@ -21,9 +21,18 @@ pub struct Ssa16TemplateStatus {
     pub message: String,
 }
 
-fn template_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../.local/ssa-templates/ssa-16-bk.pdf")
+// Windows builds cannot cache forms in a developer's compile-time checkout.
+pub(crate) fn template_path() -> Result<PathBuf, String> {
+    #[cfg(windows)]
+    {
+        Ok(crate::operator_auth::private_directory()?
+            .join("ssa-templates").join("ssa-16-bk.pdf"))
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../.local/ssa-templates/ssa-16-bk.pdf"))
+    }
 }
 
 fn matches_reviewed_form(contents: &[u8]) -> bool {
@@ -44,7 +53,7 @@ fn cached_file_ok(path: &Path) -> bool {
 
 #[tauri::command]
 pub fn ssa16_template_status() -> Ssa16TemplateStatus {
-    let installed = cached_file_ok(&template_path());
+    let installed = template_path().is_ok_and(|path| cached_file_ok(&path));
     Ssa16TemplateStatus {
         installed,
         message: if installed {
@@ -70,7 +79,7 @@ pub fn install_ssa16_template(source_path: String) -> Result<Ssa16TemplateStatus
     if !matches_reviewed_form(&bytes) {
         return Err("PDF does not match the reviewed, blank SSA-16 (09-2025). Choose the unchanged official form; do not use a filled, re-saved, or alternative edition.".into());
     }
-    let dest = template_path();
+    let dest = template_path()?;
     if dest.exists() {
         if cached_file_ok(&dest) {
             return Ok(ssa16_template_status());

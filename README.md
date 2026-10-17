@@ -41,6 +41,10 @@ For enrollment, password storage, lock behavior and future passkey limitations, 
 
 Optional **ZITADEL federated sign-in** is available through native OIDC Authorization Code + PKCE, verified signed ID tokens, and explicit linking to the existing single-operator SOAR profile. Configure an approved ZITADEL **Native** application in **Profile & ZITADEL**. The local password continues working offline, and a linked external identity never unlocks the independent encrypted case keys. Setup: [ZITADEL Native app and account linking](docs/ZITADEL-SETUP.md). ZITADEL cloud tenancy and OIDC registration are not provisioned by this repository.
 
+## Native Windows 11 preview (x86-64)
+
+An **unsigned, fictional-data-only** Windows Tauri installer is under development without WSLg. It keeps Rust and React and does **not** yet bundle Laya, Qwen/CUDA, PDF rendering or restricted OCR. The existing WSL2 installation and vaults remain untouched. See the [native Windows preview guide](docs/WINDOWS-NATIVE-PREVIEW.md).
+
 ## Development checks
 
 ```bash

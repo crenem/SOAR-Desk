@@ -209,6 +209,9 @@ struct ClassifyRequest {
 #[tauri::command]
 fn classify_synthetic_text(request: ClassifyRequest) -> Result<serde_json::Value, String> {
     operator_auth::require_operator()?;
+    if cfg!(windows) {
+        return Err("Laya is not bundled with this Windows native preview; use fictional forms without local AI.".into());
+    }
     use std::{io::Write, process::{Command, Stdio}};
     local_case_review_ack(request.synthetic_confirmed,request.local_risk_acknowledged)?;
     if request.text.len() > 80_000 { return Err("Text exceeds development limit".into()); }
@@ -237,6 +240,9 @@ struct QwenRequest {
 #[tauri::command]
 fn extract_qwen_candidates(request: QwenRequest) -> Result<serde_json::Value, String> {
     operator_auth::require_operator()?;
+    if cfg!(windows) {
+        return Err("Qwen/CUDA inference is not bundled with this Windows native preview.".into());
+    }
     use std::{io::Write, process::{Command, Stdio}};
     local_case_review_ack(request.synthetic_confirmed,request.local_risk_acknowledged)?;
     if request.text.is_empty() || request.text.len() > 5000 { return Err("Qwen passage must contain 1–5,000 characters".into()); }
@@ -377,6 +383,9 @@ fn export_local_ssa16_working_pdf(request: SyntheticPdfRequest) -> Result<serde_
     render_ssa16_review_pdf(request,false)
 }
 fn render_ssa16_review_pdf(request: SyntheticPdfRequest,training:bool) -> Result<serde_json::Value, String> {
+    if cfg!(windows) {
+        return Err("SSA-16 PDF rendering requires a Windows worker package and is disabled in this unsigned preview.".into());
+    }
     use std::{
         io::Write,
         path::{Path, PathBuf},
@@ -404,7 +413,7 @@ fn render_ssa16_review_pdf(request: SyntheticPdfRequest,training:bool) -> Result
         return Err("Existing PDF files cannot be overwritten; choose a new name.".into());
     }
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let source = root.join(".local/ssa-templates/ssa-16-bk.pdf");
+    let source = ssa_template_commands::template_path()?;
     if !source.is_file() {
         return Err(
             "Official SSA-16 template not cached. Run: bash scripts/prepare-ssa16-template.sh"
