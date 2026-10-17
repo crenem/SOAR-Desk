@@ -56,6 +56,40 @@ export default function EvidenceRegister({evidence,setEvidence,syntheticOnly=tru
   finally{setBusy(null);}
  }
 
+ async function recoverUnregistered(){
+  setError("");setNotice("");setBusy("inventory");
+  try{
+   const stored=await invoke<Array<{blob_id:string;sha256:string;bytes:number;extension:string}>>("list_case_evidence",{request:{case_reference:caseReference}});
+   const known=new Set(evidence.map(e=>e.blobId).filter(Boolean));
+   const missing=stored.filter(item=>!known.has(item.blob_id));
+   if(missing.length===0){
+     setNotice("Every accessible encrypted original is already registered in this open case.");
+     return;
+   }
+   if(!window.confirm(missing.length+" encrypted original(s) have no current evidence-register entry. Recover them as PENDING evidence with an unknown original filename? The encrypted files will not be deleted or decrypted to disk."))return;
+   const prefix=syntheticOnly?"SYN-EV-":"EV-";
+   setEvidence(current=>{
+     const existing=new Set(current.map(e=>e.blobId).filter(Boolean));
+     let next=Math.max(0,...current.map(e=>Number(e.id.match(new RegExp("^"+prefix+"(\\\\d+)$"))?.[1]||0)))+1;
+     const additions:EvidenceReference[]=[];
+     for(const item of missing){
+       if(existing.has(item.blob_id))continue;
+       existing.add(item.blob_id);
+       additions.push({
+         id:prefix+String(next++).padStart(4,"0"),
+         title:"Recovered encrypted original (filename unknown)",
+         kind:"other",status:"pending",location:"",
+         note:"Recovered from the authenticated case attachment directory after an interrupted or unregistered import. Inspect the original before classifying or verifying.",
+         reviewer:"",blobId:item.blob_id,sha256:item.sha256,bytes:item.bytes,
+         originalFilename:"recovered-"+item.blob_id.slice(0,12)+"."+item.extension
+       });
+     }
+     return [...current,...additions];
+   });
+   setNotice("Recovered "+missing.length+" encrypted original reference(s) as pending. Use Save now to persist their metadata; inspect each original before human verification.");
+  }catch(e){setError("Encrypted evidence inventory failed: "+String(e));}
+  finally{setBusy(null);}
+ }
  function add(){
    const prefix=syntheticOnly?"SYN-EV-":"EV-";
    const indices=evidence.map(e=>Number(e.id.match(new RegExp("^"+prefix+"(\\d+)$"))?.[1]||0));
@@ -109,5 +143,6 @@ export default function EvidenceRegister({evidence,setEvidence,syntheticOnly=tru
    </div>
   </fieldset>)}
   <button className="secondary" type="button" onClick={add}>Add evidence reference</button>
+  <button className="secondary" type="button" disabled={busy!==null} onClick={()=>void recoverUnregistered()}>Recover unregistered encrypted originals…</button>
  </section>;
 }
