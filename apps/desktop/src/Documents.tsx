@@ -141,7 +141,7 @@ export default function Documents({caseReference,syntheticOnly,onPrefill,onEvide
         ...analysisMode(syntheticOnly)
       }});
       const humanReview:DocumentReviewRecord|undefined=
-        review!=="PendingHumanReview" && !!reviewer.trim() && !!rationale.trim()
+        review!=="PendingHumanReview" && reviewer.trim().length>=3 && rationale.trim().length>=12
         ? {outcome:review,reviewerId:reviewer.trim(),rationale:rationale.trim(),
            recordedAt:new Date().toISOString(),documentSha256:document.sha256}
         : undefined;
@@ -166,11 +166,11 @@ export default function Documents({caseReference,syntheticOnly,onPrefill,onEvide
   const verifiedMetadata = metadata.filter(m=>m.status==="HumanVerified").length;
   const fillCandidates = document && documentCase===caseReference ? reviewedSuggestions(metadata,document.sha256,documentCase) : [];
   function updateMetadata(id:string, patch:Partial<MetadataCandidate>){setMetadata(items=>items.map(m=>m.id===id?{...m,...patch,status:patch.value!==undefined?"PendingHumanReview":(patch.status??m.status)}:m)); setReview("PendingHumanReview");}
-  const readyToReview=!busy && !!document && segments.length>0 && review!=="PendingHumanReview" && !!reviewer.trim() && !!rationale.trim();
+  const readyToReview=!busy && !!document && segments.length>0 && review!=="PendingHumanReview" && reviewer.trim().length>=3 && rationale.trim().length>=12;
   return <section className="panel" aria-label="Document intake and evidence assessment">
     <div className="eyebrow">{syntheticOnly?"DOCUMENT PROCESSING · SYNTHETIC TEST DATA ONLY":"RESTRICTED LOCAL DOCUMENT ANALYSIS · NOT DEPLOYMENT-APPROVED"}</div>
     <h1>Document intake and evidence review</h1>
-    <p className="intro">Select {syntheticOnly?"a fictional":"an organization-authorized local"} document. Text extraction, OCR, classification and source-grounded proposals run on this computer. Results are not disability determinations. Original document bytes and complete model analyses are not yet part of the encrypted case vault.</p>
+    <p className="intro">Select {syntheticOnly?"a fictional":"an organization-authorized local"} document. Text extraction, OCR, classification and source-grounded proposals run on this computer. Results are not disability determinations. Original documents are encrypted into the case only when you choose Attach original; extracted text and model-generated findings remain session-only. A completed human document-level review can be saved with an attached original.</p>
     <label className="checkline"><input type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/>{syntheticOnly?"I confirm the selected document contains only fictional test information.":"I am authorized by the nonprofit to process this document locally. I understand this development version has not completed a PHI/security review; its inference server receives content over local loopback and extracted text is held in application memory."}</label>
     <button type="button" className="primary" disabled={!confirmed||busy} onClick={browse}>Browse and analyze document…</button>
     {path && <p className="muted" style={{overflowWrap:"anywhere"}}><strong>Selected file:</strong> {path}</p>}
@@ -255,6 +255,7 @@ export default function Documents({caseReference,syntheticOnly,onPrefill,onEvide
       </section>
       <section className="review">
         <h2>Human decision on document evidence</h2>
+        <p className="hint">To retain a document-level decision in the encrypted case, record a reviewer identifier (at least 3 characters) and rationale (at least 12 characters), then attach the original and save the case. A source attached without a complete review remains pending.</p>
         <p>No findings are automatically approved. Verify completeness, OCR fidelity, provenance and model suggestions before recording a document review. This does not decide whether the applicant qualifies for SSI/SSDI or SOAR services.</p>
         <label>Review outcome<select value={review} onChange={e=>setReview(e.target.value as Review)} disabled={busy}>
           <option value="PendingHumanReview">Pending human review</option>
