@@ -4,7 +4,7 @@
 //! This is NOT an organizational identity service or passkey implementation.
 use argon2::{password_hash::{PasswordHash,PasswordHasher,PasswordVerifier,SaltString,rand_core::OsRng},Argon2};
 use serde::{Deserialize,Serialize};
-use std::{env,fs::{self,OpenOptions},io::{ErrorKind,Write},path::{Path,PathBuf},sync::{Mutex,OnceLock},time::{Duration,Instant}};
+use std::{env,fs::{self,OpenOptions},io::{ErrorKind,Write},path::PathBuf,sync::{Mutex,OnceLock},time::{Duration,Instant}};
 use zeroize::Zeroizing;
 
 const IDLE_SECONDS:u64=15*60;
