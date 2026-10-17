@@ -37,6 +37,12 @@ A separate local sign-in was implemented for the Ubuntu/WSL2 desktop process: in
 
 Limitations: one local operator per Linux OS account, no multiuser roles or device-trusted Windows Hello/FIDO2 passkey yet, no independent audit, no production credential-recovery or organizational identity controls. Stored source originals or exported plaintext PDF documents outside the encrypted vault are **not** protected by this gate. See [operator access security model](OPERATOR-ACCESS.md).
 
+## Optional ZITADEL federation (development integration)
+
+The workstation can be configured with a trusted ZITADEL HTTPS issuer and public **Native** application client ID. A browser-based **Authorization Code + PKCE S256** flow uses a three-minute one-time `127.0.0.1:8765` callback; it validates OIDC discovery, state, nonce and signed ID token before either (a) explicitly linking its issuer/subject to the already-authenticated local operator or (b) signing in an already-linked operator. The SOAR profile has its own internal UUID. **A matching email does not grant access; unknown subjects are denied.**
+
+No ZITADEL project/tenant was provisioned, and no live login callback has yet been validated on the user's WSL2/NVIDIA workstation. Federated sessions do not persist access or refresh tokens and do not unlock case encryption. Offline local login remains available. This is not yet multiuser organizational SSO, shared authorization, remote revocation, approved passkey key wrapping, HIPAA security certification or SSA affiliation. See [ZITADEL setup and test criteria](ZITADEL-SETUP.md).
+
 ## Next acceptance milestones (in priority order)
 
 1. **Evidence intake end-to-end:** Open a restricted case; analyze a source; attach the original encrypted blob; verify hash and review status; link reviewed evidence to relevant answers; save; reopen; back up and restore; verify bytes, provenance and rejection of a changed source. Test canceled imports, damaged files and lost/unwritable vaults. Preserve the original; never silently delete it.
