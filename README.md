@@ -12,6 +12,7 @@ SOAR Desk is an AGPL-3.0 Rust/Tauri 2 + React desktop workbench inspired by the 
 - Live expandable **form → section → missing field** navigation beneath Application Preparation, with direct jump/focus and conditional question coverage.
 - Guided partial interviews for SSA-16, SSA-8000-BK, SSA-3368-BK, SSA-827, SSA-3369-BK, SSA-3373-BK. SSA-8001-BK remains reference-only.
 - Encrypted whole-case snapshot with automatic 10-second changed-data saves, immediate Save now, encrypted previous version, optional encrypted backup, and nonprofit-held recovery key slot.
+- Local single-operator sign-in with a protected Argon2id password verifier, 15-minute inactivity lock, native case IPC authorization, and a manual Lock action. Operator credentials never replace separate per-case encryption passphrases; passkeys/Windows Hello are not yet implemented.
 - Distinct training `SYN-` case v1 and restricted local `CASE-UUID` v2 formats. Both use a random vault master key, authenticated AES-256-GCM and independently Argon2id-wrapped practitioner and recovery credentials. Plaintext is not automatically saved on disk by the case snapshot workflow.
 - Document text extraction/OCR and local AI-assisted clinical *suggestions* using Laya and Qwen, followed by human review of source quotes. Verified explicitly labeled identity/measurement fields can be proposed as prefills without overwriting answered fields.
 - Signature drawing or typed-name **internal acknowledgment** linked to the selected form/case SHA-256 fingerprint and signer intent. This is **NOT** an SSA-approved e-signing method or legal SSA-827 signature.
@@ -36,6 +37,8 @@ For a Windows 11 PC with Ubuntu 24.04 WSL2 and an NVIDIA GPU, run `scripts/creat
 
 Prerequisites: NVIDIA Windows driver/WSL GPU access, a CUDA toolkit containing `nvcc` in Ubuntu, and the normal Tauri, Rust, Node, Python and OCR dependencies. The shortcut does not bypass those requirements. A successful model health response does not prove CUDA offloading: verify the llama.cpp output and `nvidia-smi` during synthetic inference. This remains a development beta, not an approved PHI deployment. Complete a synthetic end-to-end test using the [Windows x86-64 / CUDA release acceptance checklist](docs/RELEASE-ACCEPTANCE-WINDOWS-CUDA.md) before attempting organizational pilot evaluation.
 
+For enrollment, password storage, lock behavior and future passkey limitations, see [local operator access](docs/OPERATOR-ACCESS.md).
+
 ## Development checks
 
 ```bash
@@ -47,6 +50,7 @@ npm install
 npm run test:workflow
 npm run test:forms
 npm run test:fields
+npm run test:auth
 npm run test:package
 npm run test:submissions
 npm run build
