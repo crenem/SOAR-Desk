@@ -13,7 +13,7 @@ import type {PrefillSuggestion} from "./document-prefill";
 import type {AttachedSource} from "./evidence-attachment";
 import {kindFor,inputMask,normalizeOnBlur,validateDisplay} from "./field-format";
 import {formCoverage,type FormCoverage,type MissingTarget} from "./form-navigation";
-import type {EvidenceReference,PackageInput,SyntheticRecoveryEvent} from "./application-package";
+import type {EvidenceReference,PackageInput,SyntheticRecoveryEvent,DocumentReviewRecord} from "./application-package";
 
 const emptyAnswer=():Response=>({value:"",status:"reported",source:""});
 const statuses:{value:AnswerStatus;label:string}[]=[
@@ -25,7 +25,7 @@ const statuses:{value:AnswerStatus;label:string}[]=[
 const display=(s:Response|undefined)=>s?.status==="unknown"?"Unknown":s?.value || "Not collected";
 const fieldsOf=(rows:Rows,key:string)=>rows[key]??[];
 type View="overview"|"interview"|"review"|"evidence"|"package"|"submissions"|"casefiles"|"signatures";
-type Props={onCaseChange?:(ref:string)=>void;onCaseModeChange?:(syntheticOnly:boolean)=>void;prefill?:PrefillSuggestion[];onPrefillApplied?:()=>void;onProgress?:(items:FormCoverage[])=>void;navigate?:{target:MissingTarget;token:number}|null;inboundEvidence?:{source:AttachedSource;caseReference:string;sequence:number}|null;onEvidenceReceived?:()=>void};
+type Props={onCaseChange?:(ref:string)=>void;onCaseModeChange?:(syntheticOnly:boolean)=>void;prefill?:PrefillSuggestion[];onPrefillApplied?:()=>void;onProgress?:(items:FormCoverage[])=>void;navigate?:{target:MissingTarget;token:number}|null;inboundEvidence?:{source:AttachedSource;caseReference:string;sequence:number;documentReview?:DocumentReviewRecord}|null;onEvidenceReceived?:()=>void};
 
 
 export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,prefill=[],onPrefillApplied,onProgress,navigate,inboundEvidence,onEvidenceReceived}:Props){
@@ -54,7 +54,7 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
        id:prefix+String(next).padStart(4,"0"),title:attached.original_name,
        kind:"other",location:"",note:"Original source imported from Document evidence; classify and verify against the original.",
        status:"pending",reviewer:"",blobId:attached.blob_id,
-       originalFilename:attached.original_name,sha256:attached.sha256,bytes:attached.bytes
+       originalFilename:attached.original_name,sha256:attached.sha256,bytes:attached.bytes,documentReview:inboundEvidence.documentReview
      }];
    });
    setView("evidence");
