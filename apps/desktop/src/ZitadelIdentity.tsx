@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useState} from "react";
+import {useCallback,useEffect,useRef,useState} from "react";
 import {invoke} from "@tauri-apps/api/core";
 
 export type FederatedOperatorStatus={
@@ -17,6 +17,9 @@ export default function ZitadelIdentity({mode,linked,onSuccess}:Props){
  const [error,setError]=useState("");
  const [notice,setNotice]=useState("");
  const [busy,setBusy]=useState(false);
+ const completed=useRef(false);
+ const onSuccessRef=useRef(onSuccess);
+ onSuccessRef.current=onSuccess;
  const refresh=useCallback(async()=>{
   try{
    const data=await invoke<Settings>("zitadel_settings");
@@ -30,13 +33,15 @@ export default function ZitadelIdentity({mode,linked,onSuccess}:Props){
   if(flow!=="pending")return;
   let live=true;
   const check=async()=>{
+   if(completed.current)return;
    try{
     const progress=await invoke<{state:string}>("zitadel_auth_progress");
     if(!live)return;
     if(progress.state==="ready"){
+     completed.current=true;
      setFlow("completing");
      const result=await invoke<FederatedOperatorStatus>("complete_zitadel_auth");
-     if(live){setNotice(mode==="link"?"ZITADEL identity linked to this local profile.":"ZITADEL sign-in successful.");setFlow("idle");setUrl("");onSuccess(result);}
+     if(live){setNotice(mode==="link"?"ZITADEL identity linked to this local profile.":"ZITADEL sign-in successful.");setFlow("idle");setUrl("");onSuccessRef.current(result);}
     }else if(progress.state==="failed"||progress.state==="expired"||progress.state==="idle"){
       if(progress.state==="failed"){
        // Completing surfaces the provider's non-sensitive error.
@@ -49,7 +54,7 @@ export default function ZitadelIdentity({mode,linked,onSuccess}:Props){
   void check();
   const timer=window.setInterval(()=>{void check();},1600);
   return ()=>{live=false;window.clearInterval(timer);};
- },[flow,mode,onSuccess]);
+ },[flow,mode]);
  async function saveConfig(){
   setBusy(true);setError("");setNotice("");
   try{
@@ -60,7 +65,7 @@ export default function ZitadelIdentity({mode,linked,onSuccess}:Props){
   finally{setBusy(false);}
  }
  async function begin(){
-  setBusy(true);setError("");setNotice("");
+  setBusy(true);setError("");setNotice("");completed.current=false;
   try{
    const reply=await invoke<{url:string;expires_seconds:number}>("begin_zitadel_auth",{request:{mode}});
    setUrl(reply.url);setFlow("pending");
