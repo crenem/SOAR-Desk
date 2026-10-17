@@ -136,17 +136,6 @@ fn http_client()->Result<reqwest::blocking::Client,String>{
         .timeout(Duration::from_secs(15))
         .build().map_err(|_|"Cannot create secure OIDC HTTP client.".into())
 }
-fn discovered_client(
-    issuer:&str,client_id:&str,
-)->Result<CoreClient<
-    openidconnect::EndpointSet,openidconnect::EndpointNotSet,
-    openidconnect::EndpointNotSet,openidconnect::EndpointNotSet,
-    openidconnect::EndpointMaybeSet,openidconnect::EndpointMaybeSet
->,String>{
-    // This function's concrete client type is intentionally not relied on
-    // by callers; see the simpler shared metadata constructor below.
-    unreachable!("Use make_client()")
-}
 fn callback_message(mut connection:TcpStream,expected_state:&str)->Option<Result<String,String>>{
     connection.set_read_timeout(Some(Duration::from_secs(3))).ok()?;
     let mut buffer=[0u8;8192];
