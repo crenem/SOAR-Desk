@@ -1,5 +1,6 @@
 mod vault_commands;
 mod operator_auth;
+mod zitadel_oidc;
 mod ssa_template_commands;
 
 use serde::Deserialize;
@@ -455,7 +456,7 @@ fn render_ssa16_review_pdf(request: SyntheticPdfRequest,training:bool) -> Result
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![operator_auth::operator_status, operator_auth::enroll_operator, operator_auth::login_operator, operator_auth::logout_operator, evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text, extract_qwen_candidates, export_synthetic_draft, export_synthetic_ssa16_pdf, export_local_ssa16_working_pdf, vault_commands::create_synthetic_vault, vault_commands::open_synthetic_vault, vault_commands::backup_synthetic_vault, vault_commands::recover_synthetic_vault, vault_commands::autosave_synthetic_case, vault_commands::synthetic_autosave_status, vault_commands::lock_synthetic_autosave, vault_commands::attach_evidence_document, vault_commands::verify_attached_evidence, vault_commands::list_case_evidence, vault_commands::export_evidence_document, ssa_template_commands::ssa16_template_status, ssa_template_commands::install_ssa16_template])
+        .invoke_handler(tauri::generate_handler![operator_auth::operator_status, operator_auth::enroll_operator, operator_auth::login_operator, operator_auth::logout_operator, zitadel_oidc::zitadel_settings, zitadel_oidc::configure_zitadel, zitadel_oidc::begin_zitadel_auth, zitadel_oidc::zitadel_auth_progress, zitadel_oidc::complete_zitadel_auth, evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text, extract_qwen_candidates, export_synthetic_draft, export_synthetic_ssa16_pdf, export_local_ssa16_working_pdf, vault_commands::create_synthetic_vault, vault_commands::open_synthetic_vault, vault_commands::backup_synthetic_vault, vault_commands::recover_synthetic_vault, vault_commands::autosave_synthetic_case, vault_commands::synthetic_autosave_status, vault_commands::lock_synthetic_autosave, vault_commands::attach_evidence_document, vault_commands::verify_attached_evidence, vault_commands::list_case_evidence, vault_commands::export_evidence_document, ssa_template_commands::ssa16_template_status, ssa_template_commands::install_ssa16_template])
         .run(tauri::generate_context!())
         .expect("error starting SOAR Desk");
 }
