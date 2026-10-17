@@ -95,7 +95,7 @@ export function checkEvidence(evidence:EvidenceReference[],syntheticOnly=true):v
     if(!item.title.trim())throw Error("Evidence "+item.id+" needs a descriptive title.");
     if(item.blobId&&(!/^[a-f0-9]{32}$/i.test(item.blobId)||
        !/^[a-f0-9]{64}$/i.test(item.sha256??"")||
-       !Number.isSafeInteger(item.bytes)||!(item.bytes!>0))){
+       !Number.isSafeInteger(item.bytes)||!(typeof item.bytes==="number" && item.bytes>0))){
       throw Error("Attached encrypted evidence needs a valid blob ID, digest and positive byte count: "+item.id);
     }
     if(item.documentReview){
