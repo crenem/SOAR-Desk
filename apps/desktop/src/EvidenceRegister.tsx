@@ -70,7 +70,7 @@ export default function EvidenceRegister({evidence,setEvidence,syntheticOnly=tru
    const prefix=syntheticOnly?"SYN-EV-":"EV-";
    setEvidence(current=>{
      const existing=new Set(current.map(e=>e.blobId).filter(Boolean));
-     let next=Math.max(0,...current.map(e=>Number(e.id.match(new RegExp("^"+prefix+"(\\\\d+)$"))?.[1]||0)))+1;
+     let next=Math.max(0,...current.map(e=>Number(e.id.match(new RegExp("^"+prefix+"(\\d+)$"))?.[1]||0)))+1;
      const additions:EvidenceReference[]=[];
      for(const item of missing){
        if(existing.has(item.blob_id))continue;
