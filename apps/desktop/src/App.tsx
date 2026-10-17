@@ -1,5 +1,6 @@
 import { useState } from "react";
 import WindowChrome from "./WindowChrome";
+import OperatorGate from "./OperatorGate";
 import ProgressNav from "./ProgressNav";
 import type {FormCoverage,MissingTarget} from "./form-navigation";
 import Documents from "./Documents";
@@ -30,7 +31,10 @@ const domains = ["Physical", "Cognitive", "Social", "Adaptation", "AttendanceAnd
 type Domain = typeof domains[number];
 const friendlyDomain: Record<Domain,string> = { Physical: "Physical abilities", Cognitive: "Cognition and concentration", Social: "Interacting with others", Adaptation: "Adapting and managing oneself", AttendanceAndPersistence: "Attendance and sustained performance" };
 
-export default function App() {
+export default function App(){
+ return <OperatorGate>{(operator,lock)=><AuthenticatedWorkspace operator={operator} onLock={lock}/>}</OperatorGate>;
+}
+function AuthenticatedWorkspace({operator,onLock}:{operator:string;onLock:()=>void}) {
   const [step, setStep] = useState(0);
   const [workspaceMode, setWorkspaceMode] = useState<"screening"|"documents"|"applications">("applications");
   const [caseReference,setCaseReference]=useState("SYN-APPLICATION-001");
@@ -74,6 +78,10 @@ export default function App() {
     <a href="#main" className="skip">Skip to main content</a>
     <aside className="sidebar" aria-label="Screening navigation">
       <div className="brand"><span aria-hidden="true" className="brandmark">✳</span><span>SOAR <strong>Desk</strong><small>Community edition</small></span></div>
+      <div className="operator-sidebar">
+       <span>Signed in: <strong>{operator}</strong></span>
+       <button type="button" className="operator-lock-button" onClick={onLock}>Lock SOAR Desk</button>
+      </div>
       <div className="sidebar-header">REFERRAL WORKSPACE</div>
       <div className="workspace-nav" role="group" aria-label="Workspace">
       <button type="button" className={workspaceMode==="applications"?"selected":""} onClick={()=>setWorkspaceMode("applications")}>Application preparation</button>
