@@ -10,7 +10,7 @@ The paid edition provides actual collaborative case management and AI assistance
 
 ## Trusted Google Cloud services and boundaries
 
-- **Cloud Firestore** is the structured database (not Firebase Realtime Database); the Google Cloud HIPAA-covered services list explicitly includes Firestore. Firestore supports organization-specific collections, optimistic updates, indexed queries and case-level audit references.
+- **Cloud Firestore** provides the **(default)** control-plane directory and a dedicated named database per organization (not Firebase Realtime Database). The Google Cloud HIPAA-covered services list explicitly includes Firestore. All client/case/medical data resides only in the corresponding tenant database; org membership and subscription metadata remain in (default).
 - **Cloud Storage** holds encrypted medical evidence and other binary attachments; never store binaries, PDFs, SSNs, applicant names or clinical snippets in Firestore document IDs, billing metadata or URLs. Cloud KMS provides key-encryption operations and managed rotation policies.
 - **Cloud Run (Rust/Axum)** is the required backend-for-frontend/API. Desktop clients do *not* directly access privileged Firestore Admin APIs. All tenant, case, seat and subscription authorization must be repeated server-side, including on list/search, blob download and AI retrieval. Service-account IAM is least-privilege; Cloud Firestore server SDKs bypass Firebase client Security Rules.
 - **ZITADEL OIDC** continues as authentication. Validate issuer, audience, expiry and subject on the backend; map `iss+sub` to a stable internal user ID and verified organization membership. Do not grant membership based only on email/domain. If a Firebase SDK is ever needed, use an explicitly reviewed Identity Platform bridge and scoped tokens; do not confuse user authentication with case authorization.
@@ -30,7 +30,8 @@ Windows 11 SOAR Desk (Tauri/Rust/React)
     Cloud Run: SOAR Desk API (Rust/Axum)
        |              |               |
     Firestore     Cloud Storage    AI broker + policy
-    org/cases     encrypted blobs         |
+    default index  tenant-segmented encrypted evidence
+    + org DBs         |
     seats/tasks   evidence hashes     covered Gemini API
        |              |               |
           KMS / audit / backups
@@ -56,25 +57,42 @@ Per-case grants: `viewer`, `contributor`, `lead`, `reviewer`; case sharing requi
 
 Seat changes and case reassignment are atomic server actions where practical: revoke sessions, transfer outstanding tasks without leaking deleted memberships, preserve audit attribution and original authorship. Billing status never prevents lawful case export/continuity access.
 
-## Proposed Firestore paths (schema versioned)
+## Firestore control plane + organization-isolated databases (decision ADR-002)
 
-```text
-organizations/{orgId}
-organizations/{orgId}/memberships/{userId}       # role, status, activeSeatId, teams
-organizations/{orgId}/seats/{seatId}              # plan, assignedTo, effectiveFrom
-organizations/{orgId}/teams/{teamId}              # scoped membership metadata
-organizations/{orgId}/cases/{caseId}              # opaque ID, status, owner, version
-organizations/{orgId}/cases/{caseId}/grants/{userId}
-organizations/{orgId}/cases/{caseId}/forms/{formId}
-organizations/{orgId}/cases/{caseId}/tasks/{taskId}
-organizations/{orgId}/cases/{caseId}/evidence/{evidenceId} # metadata + hash, no blobs
-organizations/{orgId}/cases/{caseId}/aiReviews/{proposalId}
-organizations/{orgId}/events/{eventId}            # append-only tenant event metadata
-organizations/{orgId}/subscriptions/{subscriptionId}
-users/{userId}                                    # minimal identity/preferences only
-```
+**Decision:** The Firestore **(default)** database contains the organization directory, active licensed seats, user memberships and billing metadata only. Every organization receives its **own named Firestore database instance**, not an org-specific collection in (default). All claimant, case, evidence, extracted medical, clinical review and case audit data stays in that organization's data plane.
 
-Blobs: `gs://<restricted-bucket>/orgs/{orgId}/cases/{caseId}/evidence/{opaqueEvidenceId}`, encrypted, access only through short-lived scoped operations or authenticated Cloud Run stream. No public bucket ACL, public signed URLs in logs, or client-supplied bucket paths without validation. Redact or omit PHI in case-list payloads unless authorized. Use stable opaque identifiers, revision/Etag conflict checks, and migrations. Implement per-organization quota and retention rules.
+~~~text
+Firestore (default) [Control Plane]
+└── Organizations/                                  # collection
+    └── {organizationId}/                            # document
+        ├── organizationDbId                          # named database
+        ├── organizationProjectId                     # data-plane GCP project
+        ├── region / status / schemaVersion
+        ├── subscriptionId / plan / seatCount
+        └── users/
+            └── {userId}/                            # roles, seat, status, teams
+
+Firestore ({organizationDbId}) [Organization Data Plane]
+├── applicantRecords/{applicantId}
+├── cases/{caseId}
+│   ├── grants/{userId}
+│   ├── interviews/{interviewId}
+│   ├── applications/{applicationId}
+│   ├── forms/{formId}
+│   ├── evidence/{evidenceId}
+│   ├── tasks/{taskId}
+│   └── aiProposals/{proposalId}
+├── providers/{providerId}
+└── auditEvents/{eventId}
+~~~
+
+Client supplies only the **organization ID**. Authenticated Cloud Run resolves its database/project ID from the stored directory after verifying active organization membership and seat status, and separately verifies case/document grants **inside the organization database**. Never trust a client-provided database ID, project ID, bucket name or role claim as sufficient authorization. Org administrators and billing administrators have no default claimant access. Firestore server/Admin clients bypass client Security Rules, so backend ABAC and database-scoped least-privilege IAM are mandatory. Per-org backups, delete protection, retention and encrypted evidence storage are mandatory.
+
+Each project supports **100 databases by default**, so route named tenant databases across multiple Inimetrica GCP data-plane projects when needed, preserving the central default directory in one control-plane project. Named databases have usage charges and **no free quota**. Cross-database transactions are not atomic: use idempotency and a saga/outbox for tenant provisioning and org workflows. The database provisioning API must be automated and gate tenant activation on isolation/security tests.
+
+**Detailed security, lifecycle, routing, schema and scaling requirements:** [ADR-002 — Organization database isolation](ADR-002-ORG-DATABASE-ISOLATION.md).
+
+All cross-org sharing is disallowed for v1; an explicit consent-/authorization-governed exchange is required to transfer evidence between organizations. No former ESL records or database configuration may be copied to the new instances.
 
 ## AI copilot: human-in-the-loop workflows
 
