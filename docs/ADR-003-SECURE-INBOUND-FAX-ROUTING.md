@@ -5,7 +5,7 @@
 
 ## Core safety invariant
 
-**Never allow an AI prediction, sender fax number, OCR-extracted name, or returned cover sheet alone to move protected data into a client's case.** Every inbound fax enters encrypted restricted intake first. Automatic release is allowed *only* when deterministic, corroborated checks establish the same organization, active request, intended patient and recipient and pass policy rules. Otherwise, **hold in quarantine for purpose-limited human review**. No cross-organization routing of payloads without controlled, audited, separately approved disclosure.
+**Never allow an AI prediction, sender fax number, OCR-extracted name, or returned cover sheet alone to move protected data into a client's case.** Every inbound fax enters encrypted restricted intake first. For the **initial commercial release, automatic case assignment is disabled**: after deterministic checks, an authorized human must verify **each document/page group** and approve attachment to a specific case. Any uncertainty is **held in quarantine for purpose-limited human review or retransmission**. Consider automation only as a future, separately assessed change with measured accuracy and approvals. No cross-organization routing of payloads without controlled, audited, separately approved disclosure.
 
 No product can guarantee that providers never misdial a number, send the wrong patient chart, or combine patients in one fax. The security objective is fail-closed automatic assignment, strict containment, transparent provenance and prompt incident response—not a claim of absolute zero incidents or 100% auto-routing.
 
@@ -69,7 +69,7 @@ The existing Firestore (default) control plane may hold **opaque organization ID
 - Missing/ambiguous/deactivated number, cross-tenant mismatch, vendor-account discrepancy or number still in reassignment cool-down → **global security quarantine**.
 - Allocate one org-scoped restricted inbox (not applicant case). No global PHI-containing dashboard for ordinary admins.
 
-**Case gate (corroborated):** An automated case assignment is permissible **only if ALL** checks pass:
+**Case gate (corroborated):** The following are mandatory **preconditions for presenting a proposed match to an authorized human reviewer**. They do **not** authorize automated release in the initial product:
 1. Active expected outgoing records request for *this same organization*, and a valid, unexpired request token recovered from the fax, not solely from AI-generated similarity.
 2. At least two independent contextual identity elements (for example applicant full legal name + DOB or independently validated medical record identifier) extracted or verified from the actual content, consistent with the requested patient and not in conflict with any page; be mindful that OCR confidence is not source identity certainty.
 3. Provider context is consistent with the request; nothing indicates mixed patients, wrong document, incomplete pages, inconsistent identifying information, or an unintended recipient.
@@ -77,9 +77,9 @@ The existing Firestore (default) control plane may hold **opaque organization ID
 5. Backend confirms active tenant state and valid case permission path, with no client-supplied project/database/bucket selector; checks happen again before release and notification.
 6. Source object is immutable/hash-checked, available after scanning/parse checks, not previously bound elsewhere and bound exactly once through an idempotent audited state transition.
 
-**If any precondition fails, no automatic assignment.** Route to a *restricted organizational intake reviewer*, or the central security quarantine if the organization itself is uncertain. Reviewers must have a specific time-limited intake grant; admins/billing staff do not implicitly receive PHI access. Human reviewers explicitly verify patient identity, intended receiving organization, source document, scope and destination. Four-eyes approval for proposed reassignment across organizations, cross-patient corrections, sensitive Part 2 cases or ambiguous mixed charts, with documented privacy review and legal authority. Reassignment is implemented as controlled export/import/reconciliation rather than just changing an orgId pointer.
+**All case assignments require explicit authorized human approval in the initial GA, even if every precondition passes.** If any precondition fails, no case assignment. Route to a *restricted organizational intake reviewer*, or the central security quarantine if the organization itself is uncertain. Reviewers must have a specific time-limited intake grant; admins/billing staff do not implicitly receive PHI access. Human reviewers explicitly verify patient identity, intended receiving organization, source document, scope and destination. Four-eyes approval for proposed reassignment across organizations, cross-patient corrections, sensitive Part 2 cases or ambiguous mixed charts, with documented privacy review and legal authority. Reassignment is implemented as controlled export/import/reconciliation rather than just changing an orgId pointer.
 
-AI/OCR may **suggest** matches and flag conflicts after approved processing only. Confidence thresholds help prioritize review but cannot substitute for the mandatory deterministic gates.
+AI/OCR may **suggest** matches and flag conflicts after approved processing only. Confidence thresholds help prioritize review but cannot substitute for mandatory deterministic checks and human release. Assume many medical faxes are degraded, mixed or unreadable; see **[ADR-004 — Degraded Fax Document Recovery](ADR-004-DEGRADED-FAX-DOCUMENT-RECOVERY.md)** for immutable originals, non-destructive page enhancement, multiple OCR proposals, visible uncertainty, source coordinates and clinically significant field validation.
 
 ## State machine and data custody
 
@@ -89,14 +89,15 @@ RECEIVED
  → QUARANTINED_UNALLOCATED or QUARANTINED_ORG
  → SCANNED
  → ROUTING_CANDIDATE
- → VERIFIED_BY_POLICY or REVIEW_REQUIRED
+ → REVIEW_REQUIRED
+ → HUMAN_VERIFIED_PAGE_AND_PATIENT
  → CASE_BOUND
  → AVAILABLE_TO_AUTHORIZED_CASE_USERS
  → ARCHIVED_PER_RETENTION
 exception: SUSPECTED_BREACH / FAILED_INTEGRITY / MALWARE / DUPLICATE / MISSING_PAGES
 ~~~
 
-Database metadata may advance from quarantine to case-bound only after an idempotent transaction in the **same organization's named database** records request ID, applicant/case ID, document hash, original fax message ID, policy version, identity evidence, reviewer/auto-policy decision, and timestamp. The encrypted object is promoted by a controlled storage operation that prevents public access or tenant crossover and is reconciled after failures. Cross-database operations are not ACID; use durable outbox/saga + reconciliation and fail closed on partial failures. No persistent intermediate plaintext outside approved encrypted scratch.
+Database metadata may advance from quarantine to case-bound only after an idempotent transaction in the **same organization's named database** records request ID, applicant/case ID, document hash, original fax message ID, policy version, identity evidence, recorded human reviewer decision, page boundary verification, and timestamp. The encrypted object is promoted by a controlled storage operation that prevents public access or tenant crossover and is reconciled after failures. Cross-database operations are not ACID; use durable outbox/saga + reconciliation and fail closed on partial failures. No persistent intermediate plaintext outside approved encrypted scratch.
 
 The central directory has no case identifier or medical record data. Use pseudonymous IDs in generalized monitoring. Keep append-only, tamper-evident protected event logs with access, release, error and incident events and a retention plan. Alert specifically on stuck quarantines, loss of callbacks, repeated vendor retries, delayed incomplete faxes, suspicious reassignment and unauthorized access attempts. Notifications to practitioners must say **"fax received; review needed"** without PHI in ordinary email/SMS push payloads.
 
@@ -108,7 +109,7 @@ An incorrect fax sent **to** us can itself expose a sender's PHI to an unintende
 
 ## Acceptance criteria / red-team fixtures (mandatory for pilot gate)
 
-1. Right DID + correct request + correct patient + matching pages → safe authorized case release; no other org/case sees payload.
+1. Right DID + correct request + correct patient + matching pages → human-reviewed page-by-page authorized case release; no other org/case sees payload.
 2. Wrong DID (valid number owned by a different org) with another org's patient/request data → quarantine, **never** auto-release to the DID owner or forward across orgs.
 3. No DID mapping, retired/reassigned DID, duplicate DID mapping, or unknown fax account → central security quarantine, no customer access.
 4. Matching cover sheet with **wrong patient content**; forged or photocopied request code; two patients in one fax → quarantine.
@@ -121,7 +122,7 @@ An incorrect fax sent **to** us can itself expose a sender's PHI to an unintende
 11. Test Part 2 and attorney-privileged record handling in dedicated fixtures; log/audit contain no patient data in default DB.
 12. Conduct independent privacy/security review, threat model and penetration tests of provider callback and routing before live use; retain QA evidence.
 
-**Success metrics:** 0 unauthorized automated case assignments in adversarial testing; 100% of case releases satisfy logged policy evidence; 100% of uncorroborated fax receipts remain quarantined; 100% of detected delivery anomalies receive triage under an established response policy. **Do not guarantee 100% correct delivery**, because sender-origin mistakes cannot be fully controlled by software.
+**Success metrics:** 0 automatic case assignments in initial GA and 0 unauthorized releases in adversarial testing; 100% of case releases satisfy logged policy evidence; 100% of uncorroborated fax receipts remain quarantined; 100% of detected delivery anomalies receive triage under an established response policy. **Do not guarantee 100% correct delivery**, because sender-origin mistakes cannot be fully controlled by software.
 
 ## Implementation / product-roadmap impact
 
