@@ -31,9 +31,9 @@ The program is one commercial product with related workstreams: (A) CareBase cod
 |---|---|---|---|
 | 1.0 | Program initiation and business case | Charter, stakeholder register, customer discovery, initial WBS, responsibility matrix, prioritized scope and estimates | Sponsor |
 | 2.0 | Intellectual property and data separation | Founder-to-Inimetrica CareBase license, asset/third-party review, former-employer credential/tenant/data scrubbing, repeatable clean build | Counsel + sponsor |
-| 3.0 | Cloud platform, DevSecOps and compliance | Separate staging/prod projects, IaC, CI/CD, IAM, vendor/BAA inventory, HIPAA risk analysis, incident response, backup/restore | Security lead |
+| 3.0 | Cloud platform, DevSecOps and compliance | **(default) Firestore control-plane directory; one named database per organization**; automated per-tenant provisioning, multi-project sharding, per-database IAM, indexes, backups and recovery; staging/prod separation, IaC, vendor/BAA inventory, HIPAA risk analysis, incident response | Security lead |
 | 4.0 | Canonical claimant and application data | Applicant identity, households, financial snapshots, work/education, conditions, functioning, provenance, versioning, core SOAR stages | Product owner + SOAR SME |
-| 5.0 | Multitenancy, collaboration and licensing | Org/team/seat model, ZITADEL/identity, case- and evidence-level ABAC, invites, reviews, audit, Stripe webhook billing | Security + product owner |
+| 5.0 | Multitenancy, collaboration and licensing | (default)/Organizations/{orgId}/users/{userId} for membership/seat control, immutable verified project/database binding, ZITADEL/identity, **organization database-local** case/evidence ABAC, invites, audits, Stripe webhook billing | Security + product owner |
 | 6.0 | SSA application/forms engine | Official form edition registry, field crosswalk, completeness engine, reviewed PDF exports, deadline/tracking workflow | SSA/SOAR SME + QA |
 | 7.0 | AI evidence intelligence and narrative | Secure model broker (covered Google Cloud Gemini and/or approved OpenAI), OCR/ingestion, medical chronology, sourced extracted facts, FAST/MSR draft and clinician review | QA + privacy lead + SOAR SME |
 | 8.0 | Records acquisition and interoperability | Provider finder, consent ledger, secure fax BAA/vendor, outbound approval, inbound triage, reminders; FHIR sandbox adapter | Privacy lead + integrator |
@@ -55,8 +55,8 @@ The critical dependency chain is **IP/data separation → Inimetrica clean stagi
 | Phase / gate | Target window | Deliverables | Objective gate / exit evidence |
 |---|---|---|---|
 | **0. Initiation — G0 Charter** | Oct–Nov 2026 (weeks 1–4) | Charter; CareBase/SOAR repo inventory; written IP-license plan; 6–10 customer discovery interviews across SOAR and legal practices; preliminary BAA matrix; product backlog, definition of done, cost/capacity range | Sponsor approves scope, target users, benefit case, owners, initial risks, no transfer of ESL data |
-| **1. Architecture & clean staging — G1 Secure design** | Nov–Dec 2026 (weeks 5–10) | Cloud IaC; empty Inimetrica staging; removal of legacy project fallback; baseline threat model; privacy data map; tests for Firestore/Storage isolation; Windows native smoke test | All critical former-tenant references removed from deploy path; no unauthenticated/wrong-tenant access; restore drill with synthetic data |
-| **2. Canonical applicant & team workspace — G2 Core platform** | Jan–Mar 2027 (weeks 11–22) | Applicant model, effective dates/provenance, versioned facts, organization/seat/member/case grants, case queues, write conflict policy, APIs; first 3–4 SSA crosswalks | Representative synthetic journeys pass; **zero** cross-tenant fixture leaks; revoked user denied; applicant facts reused without silent overwrite |
+| **1. Architecture & clean staging — G1 Secure design** | Nov–Dec 2026 (weeks 5–10) | Cloud IaC; empty Inimetrica staging; **(default) org directory + isolated named organization database provisioner**; multi-project routing/limits; removal of legacy project fallback; threat model and tests for Firestore/Storage isolation; Windows smoke test | Legacy references removed; unauthorized and wrong-org access denied at both database and case layer; tenant provision/recovery drill passes using synthetic data |
+| **2. Canonical applicant & team workspace — G2 Core platform** | Jan–Mar 2027 (weeks 11–22) | Applicant model, effective dates/provenance, versioned facts, **organization membership in (default)** and **case/evidence grants in each org's own named database**, case queues, conflict handling, APIs; first 3–4 SSA crosswalks | Synthetic journeys pass; **zero** cross-tenant/cross-database fixture leaks; revoked users denied; applicant facts reused without overwrite |
 | **3. Forms, evidence and AI prototype — G3 Feature-complete alpha** | Mar–May 2027 (weeks 19–31; overlaps stage 2) | Verified SSA templates and versions; more form mappings; local encrypted record bridge; chronology, cited extraction and FAST/MSR proposals with human edit/reject; AI budget controls | High-risk field mapping tests pass against reviewed official editions; no unsupported auto-citations accepted; no unreviewed outbound actions |
 | **4. Managed acquisition, billing and HIPAA gate — G4 Pilot authorization** | May–Jul 2027 (weeks 27–39; overlaps stage 3) | Secure fax vendor + BAA where applicable; authorization model, provider request workflow, inbound quarantine; Stripe live-seat mechanics, contract/BAAs, security risk analysis and mitigations, pen test, support plan | Signed agreements, written go/no-go for PHI, medium/high findings accepted or remediated under policy, access/export/recovery tests passed. Otherwise remain synthetic-only |
 | **5. Controlled customer pilot — G5 Product validation** | Jul–Sep 2027 (weeks 38–47) | 2–4 pilot organizations, cross-sector practitioner onboarding, monitored case workload (real only after G4), incident/tabletop exercises, source-grounding & usability audits, retention and cancellation drill | Pilot sign-off by users and security lead, documented performance/cost metrics, no unresolved critical/high vulnerabilities, verified customer offboarding/data continuity |
@@ -65,13 +65,15 @@ The critical dependency chain is **IP/data separation → Inimetrica clean stagi
 
 **Schedule disclaimer:** Dates are planning ranges, not a validated critical-path schedule. If engineering capacity is less than approximately 3 dedicated engineers plus a participating founder/product lead, QA and privacy/security professionals, shift phases and gate dates after phase 0 estimation. A failed gate pauses affected work or limits it to synthetic data; calendar dates never override security gates.
 
+**Architecture baseline:** The [organization-isolated database decision](ADR-002-ORG-DATABASE-ISOLATION.md) supersedes any earlier shared `organizations/{orgId}/cases` collection design. The Firestore **(default)** database contains `Organizations/{orgId}`, its `organizationDbId` and `organizationProjectId`, and `users/{userId}` memberships. **All client cases** reside in the separate named Firestore database for that organization. Provisioning, region selection, IAM, backup and cost governance are gate prerequisites, not optional post-launch improvements.
+
 ## 6. Near-term implementation backlog / first six sprints
 
 | Sprint | Focus | Accepted story slices |
 |---|---|---|
 | S0 (Oct 19–Nov 1) | Baseline and decisions | Confirm end-user journey; identify repo ownership/license items; audit former-tenant config, secrets and rules; list SSA forms; create synthetic personas and test fixture library |
-| S1 (Nov 2–15) | Cloud deployment isolation | Remove legacy project defaults, separate stage/prod config, new empty staging project, reproducible build and IAM setup; no production data |
-| S2 (Nov 16–29) | Security harness | Deny-by-default authorization policy and Firestore emulator tests across org/case/evidence; structured audit event; backup prototype |
+| S1 (Nov 2–15) | Cloud deployment isolation | Remove legacy project defaults, separate stage/prod config, empty staging **(default) org directory**, automated creation of one named case database per org, reproducible build/IAM; no production data |
+| S2 (Nov 16–29) | Security harness | Deny-by-default **cross-database** authorization policy; test forged org/project/db IDs and revoked memberships, cross-org AI evidence retrieval; structured tenant audit, backup prototype |
 | S3 (Nov 30–Dec 13) | Canonical applicant model | Create effective-dated applicant facts, sources, verification state and mutation/review rules; map identity/work/provider sample fields |
 | S4 (Dec 14–27) | Practitioner workflow | Build referral, interview, source links and missing-field navigation with synthetic applicant; first form crosswalk and validated draft |
 | S5 (Dec 28–Jan 10) | Collaboration increment | Organization provisioning, invites, named-seat skeleton, approved case assignment and role-revocation tests; demonstration and re-estimate |
@@ -132,7 +134,7 @@ All work packages require: approved requirement and threat consideration; code r
 
 | ID | Risk / assumption / issue / dependency | Impact | Preliminary treatment | Owner |
 |---|---|---|---|---|
-| R1 | Legacy CareBase repo has insecure broad rules and hardcoded former Firebase environment | Critical | Clean-room project, fail-closed config, emulator tenant attack tests, independent review | Security/tech |
+| R1 | Legacy CareBase repo has insecure broad rules and hardcoded former Firebase environment | Critical | Clean-room control project and per-org named DB provisioner, fail-closed config, tenant/shard attack tests, independent review | Security/tech |
 | R2 | Founder IP licensing vs previous employer and third-party rights | High | Written owner-to-LLC license, dependency/asset audit; prohibit transfer of ESL data | Sponsor/counsel |
 | R3 | Vendor BAA and feature eligibility mismatch for Gemini/OpenAI, fax and hosting | Critical | PHI processing disabled until executed agreements and endpoint/feature review | Privacy lead |
 | R4 | Agent hallucinates citation or sends unapproved PHI | Critical | Evidence-scoped prompts, source checks, mandatory human action gate, deny-by-default tools | AI/security |
@@ -143,7 +145,9 @@ All work packages require: approved requirement and threat consideration; code r
 | R9 | Local vault vs cloud synchronization conflicts, recovery/key loss | Critical | Explicit conflict policy, synthetic chaos/backups, no automatic migration until accepted | Tech/security |
 | R10 | Subscription failure or user turnover blocks client continuity | High | Export rights, retention policy, delayed entitlements for non-critical features, reassignable seats | Product/security |
 | A1 | Nonprofits and disability firms will value a common workflow | Unvalidated | Interview both cohorts, paid design partners, usage data and willingness-to-pay tests | Product owner |
-| D1 | Inimetrica staging Google Cloud project and IAM not yet confirmed | Blocking | Record project ID, billing ownership and secure deployment account before infrastructure writes | Sponsor |
+| D1 | Inimetrica staging Google Cloud project and IAM not yet confirmed | Blocking | Record control-plane and data-plane project IDs, billing ownership, regions and deployment identities before infrastructure writes | Sponsor |
+| R11 | Named Firestore databases limited to 100 per project by default; no free quota for tenant DBs | High | Build project-sharded provisioning and cost monitoring at inception; test 101st organization and disaster recovery | Tech/finance |
+| R12 | Control-plane identity or routing error exposes another organization's database | Critical | Never accept client DB identifiers; use immutable org-to-db binding, IAM conditions and case-level authorization, adversarial cross-database tests | Security/tech |
 
 Score probabilities and residual exposure at G0. Review weekly. Escalate a critical security issue immediately, not at the next monthly meeting. Treat requirements and target dates as **hypotheses until baselined**.
 
