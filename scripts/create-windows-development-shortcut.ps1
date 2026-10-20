@@ -16,11 +16,15 @@ if ($LASTEXITCODE -ne 0) {
   throw "WSL distribution '$Distribution' is unavailable. Run wsl -d $Distribution first."
 }
 
-$linuxHome = (& wsl.exe -d $Distribution -e printenv HOME | Select-Object -First 1)
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($linuxHome)) {
-  throw 'Could not determine the Ubuntu home folder.'
+# WSL's direct `printenv HOME` may return empty when invoked from
+# PowerShell launched inside WSL. A login shell resolves HOME from passwd.
+$homeLines = @(& wsl.exe -d $Distribution -e bash -lc 'printf "%s\\n" "$HOME"')
+$homeExitCode = $LASTEXITCODE
+$linuxHome = @($homeLines | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Last 1)
+if ($homeExitCode -ne 0 -or $linuxHome.Count -ne 1) {
+  throw 'Could not determine the Ubuntu home folder from its login shell.'
 }
-$linuxHome = $linuxHome.Trim().TrimEnd('/')
+$linuxHome = ([string]$linuxHome[0]).Trim().TrimEnd('/')
 if (-not $linuxHome.StartsWith('/')) {
   throw 'Unexpected Ubuntu HOME path; refusing to create a shortcut.'
 }
