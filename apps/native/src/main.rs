@@ -141,7 +141,45 @@ fn finish_job(
     }
 }
 
+/// Noninteractive Windows release smoke test: import, extract, version, reopen.
+fn smoke_import() -> Result<(), String> {
+    let test_root = std::env::temp_dir()
+        .join(format!("soar-smoke-import-{}", std::process::id()));
+    let result = (|| -> Result<(), String> {
+        let mut store = Store::open(&test_root).map_err(|e| format!("{e:?}"))?;
+        let case_id = store.create_case("Synthetic smoke test").map_err(|e| format!("{e:?}"))?;
+        let bytes = b"TRAINING ONLY - NOT A REAL PATIENT\\nFunctional assessment: synthetic evidence.";
+        let doc_id = store.import_document(case_id, "synthetic.txt", "text/plain", bytes)
+            .map_err(|e| format!("{e:?}"))?;
+        let originals = store.documents(case_id).map_err(|e| format!("{e:?}"))?;
+        let path = PathBuf::from(&originals[0].2);
+        let text = analysis::read_pages(&path)?;
+        if !text.contains("TRAINING ONLY") {
+            return Err("Imported document extraction failed".into());
+        }
+        store.add_artifact(case_id, Some(doc_id), "extracted_text", "final", &text)
+            .map_err(|e| format!("{e:?}"))?;
+        drop(store);
+        let store = Store::open(&test_root).map_err(|e| format!("{e:?}"))?;
+        let artifacts = store.artifacts(case_id).map_err(|e| format!("{e:?}"))?;
+        if artifacts.len() != 1 || artifacts[0].body != text {
+            return Err("Imported document did not survive restart".into());
+        }
+        drop(store);
+        Ok(())
+    })();
+    let _ = fs::remove_dir_all(test_root);
+    result
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args().any(|arg| arg == "--smoke-import") {
+        if let Err(err) = smoke_import() {
+            eprintln!("Upload smoke test failed: {err}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     let root = dirs::data_local_dir()
         .unwrap_or(std::env::current_dir()?)
         .join("SOAR Desk");
