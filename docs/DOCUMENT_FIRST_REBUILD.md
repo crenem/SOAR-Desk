@@ -3,7 +3,7 @@
 Status: target architecture; implementation work required.
 
 ## Product boundaries
-One Windows desktop application (Tauri 2, React, Rust). No parallel application editions or alternative build entry points. Preserve existing case data during migration; remove obsolete UI and build configurations only after validating replacements. Offline-first inference via configurable GenieX endpoint.
+One Windows-native Rust desktop application using Slint for the UI; remove Tauri, React, Vite, Node.js and WSL runtime/build dependencies from the supported product. No parallel application editions or alternative build entry points. Preserve existing case data during migration; remove obsolete UI and build configurations only after validating replacements. Offline-first inference through a Windows-native model runtime launched and supervised by the application (configurable backend for ARM64 and x86-64, CUDA where supported). No GenieX terminal requirement.
 
 ## Primary workflow
 1. Create/open case; drop one or more PDF/image documents.
@@ -21,7 +21,7 @@ Case(id, created_at); Document(id, case_id, sha256, filename, mime, imported_at,
 Three-pane workspace: left case/document library; center streaming analysis and versioned summaries; right facts/provenance and action controls. Primary action: Upload documents. No mandatory five-step intake wizard. Use progress states Extracting / Pass 1 / Pass 2 streaming / Saved / Error with retry.
 
 ## Reliability
-- Stream generation tokens over Tauri events with job and artifact IDs; cancellation and recovery.
+- Stream generation tokens through Rust async channels into the Slint UI with job and artifact IDs; cancellation and recovery.
 - Token budget and document chunking; map/reduce for large documents.
 - JSON schema validation with retry; preserve raw outputs for audit.
 - Deduplicate by SHA-256 and ask before attaching duplicate to same case.
@@ -31,7 +31,7 @@ Three-pane workspace: left case/document library; center streaming analysis and 
 - Do not send records to remote services without explicit configuration and authorization.
 
 ## Acceptance criteria
-A Windows desktop build opens directly to the document-first workspace; PDFs ingest and are analyzed twice; summary text visibly streams; artifacts survive restart and further uploads; narrative is generated from all preserved artifacts; SSA forms populate sourced fields and remain editable; tests and native Windows build pass.
+A Windows-native Rust/Slint desktop build opens directly to the document-first workspace; PDFs ingest and are analyzed twice; summary text visibly streams; artifacts survive restart and further uploads; narrative is generated from all preserved artifacts; SSA forms populate sourced fields and remain editable; tests and native Windows build pass.
 
 ## Migration
-Retire old form-first screens, unused demo/synthetic-only gates, and redundant launch/build variants after a tested data-preserving migration. Keep only one supported desktop application, with ARM64 and x86-64 as architectures of the same product, not separate products.
+Retire old form-first screens, unused demo/synthetic-only gates, and redundant launch/build variants after a tested data-preserving migration. Keep only one supported native Rust desktop application, with ARM64 and x86-64 as architectures of the same product, not separate products. Native Windows build and packaging only; no WSL, Ubuntu, Node.js, Python, Tauri or webview dependency. Validate the chosen inference backend and OCR support independently for each architecture before promising hardware acceleration.
