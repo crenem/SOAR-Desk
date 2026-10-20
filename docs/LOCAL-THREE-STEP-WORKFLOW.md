@@ -14,6 +14,15 @@ Build an applicant-oriented process where the practitioner collects each canonic
 - Reuse one answer and repeating list (jobs, providers, conditions etc.) throughout form views. Preserve status (reported, verified, unknown, needs clarification), source references and the original applicant testimony.
 - When the crosswalk finds competing conditional branches/types/options for one key, flag them for review; never silently collapse non-equivalent SSA questions.
 
+**Official-form completeness audit tooling added:** `scripts/audit-ssa-source-forms.py` inventories printed text lines (including candidate numbered questions), widget IDs/types/positions, exact local PDF SHA-256 hashes and unreadable/scanned pages for the seven locally cached source forms. It does **not** automatically claim semantic equivalence or approve field mappings. After obtaining the blank SSA originals in the gitignored .local cache, use:
+
+~~~bash
+./scripts/fetch-ssa-templates.sh
+python3 scripts/audit-ssa-source-forms.py --template-dir .local/ssa-templates
+~~~
+
+The generated `.local/ssa-templates/all-form-field-inventory.json` provides an explicit question/widget checklist for human field-by-field crosswalk completion. Missing templates return a nonzero status and no generated candidate mapping is considered complete.
+
 **IMPORTANT:** The registry is only PARTIAL. This work does **not** constitute an every-question audit of the official PDFs, and the generated percentage is not SSA completeness.
 
 ### 2. Attached evidence → coherent Qwen JSON — first implementation completed
