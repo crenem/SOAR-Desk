@@ -100,6 +100,10 @@ def source_supported(item, source, *, allow_field=False):
         key = item.get("field_key")
         if key not in FIELD_LABELS:
             return None
+        # Exact, explicit candidate values only: reject a plausible-looking
+        # patient answer invented in the model text but absent from its quote.
+        if value.strip().casefold() not in quote.casefold():
+            return None
         return {**common, "key": key, "label": FIELD_LABELS[key]}
     category = item.get("category")
     if category not in ALLOWED_CATEGORIES:
