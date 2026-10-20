@@ -7,8 +7,9 @@ DEVELOPMENT="${SOAR_DESK_DEVELOPMENT:-0}"
 LLAMA="$HOME/Projects/llama.cpp"
 MODEL_REPO="Qwen/Qwen3-4B-GGUF:Q4_K_M"
 PORT=8080
-mkdir -p "$HOME/.local/state/soar-desk"
-LOG="$HOME/.local/state/soar-desk/llama-server.log"
+STATE_DIR="${SOAR_DESK_STATE_DIR:-$HOME/.local/state/soar-desk}"
+mkdir -p "$STATE_DIR"
+LOG="$STATE_DIR/llama-server.log"
 cd "$ROOT"
 # Synchronize once, then execute the newly fetched launcher without a second fetch.
 if [[ "${SOAR_LAUNCH_UPDATED:-0}" != 1 ]]; then
@@ -66,7 +67,7 @@ if [[ "$DEVELOPMENT" != 1 ]] && ! "$ROOT/.venv-laya/bin/python" -c "import laya"
 fi
 
 # Checkpoints are downloaded once, then used offline by the document worker.
-LAYA_MARKER="$HOME/.local/state/soar-desk/laya-provisioned"
+LAYA_MARKER="$STATE_DIR/laya-provisioned"
 if [[ "$DEVELOPMENT" != 1 && ! -f "$LAYA_MARKER" ]]; then
   echo "Provisioning Laya English and multilingual checkpoints (first run only)..."
   if "$ROOT/.venv-laya/bin/python" -c 'from laya import Router; Router(device="cpu").preload(["english", "multilingual"])'; then
