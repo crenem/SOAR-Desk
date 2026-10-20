@@ -7,6 +7,7 @@ legal conclusion, full-form registry, or approved fill binding.
 No PHI, AI, web requests, PDF edits, signatures or submission.
 """
 import argparse
+import hashlib
 from collections import defaultdict
 import csv
 import json
@@ -25,7 +26,7 @@ def index_source(inventory):
         for page in meta["pages"]:
             for widget in page["interactive_widgets"]:
                 leaf = widget["name"].split(".")[-1]
-                source[(form, page["page"], leaf)] = widget
+                source.setdefault((form, page["page"], leaf), []).append(widget)
     return source
 
 
@@ -67,8 +68,11 @@ def verify(inventory, seed, review):
         page = form_meta["pages"][r["page"] - 1]
         if page["page"] != r["page"]:
             raise ValueError("Out-of-order page source")
-        widget = source_by_page.get(identity)
-        if widget is None or widget["kind"] != "Text" or widget["review_status"] != "UNREVIEWED":
+        matching_widgets = source_by_page.get(identity, [])
+        if len(matching_widgets) != 1:
+            raise ValueError(f"Ambiguous or missing source widget: {identity}")
+        widget = matching_widgets[0]
+        if widget["kind"] != "Text" or widget["review_status"] != "UNREVIEWED":
             raise ValueError(f"Unverified or nontext original PDF widget: {identity}")
         cue = " ".join(raw["source_cue"].split()).casefold()
         texts = [" ".join(x["text"].split()).casefold() for x in page["printed_lines"]]
@@ -105,8 +109,6 @@ def verify(inventory, seed, review):
                              "field_count": len(group),
                              "reusable_only_after_case_verification": True}
     total = sum(x["interactive_widget_count"] for x in inventory["forms"].values())
-    risky = sorted({x["form_id"] for x in inventory["forms"].values() if
-                    len(x.get("printed_edition_markers", [])) > 1})
     # Form metadata XFA/non-verified copies are explicitly blocking.
     warnings = []
     for form, meta in inventory["forms"].items():
@@ -151,6 +153,16 @@ def write_results(result, output):
     return path
 
 
+def verify_original_pdf_bytes(inventory, template_dir):
+    """Independently confirm cached originals still match the audited hashes."""
+    for form, meta in inventory["forms"].items():
+        path = template_dir / meta["source_filename"]
+        if not path.is_file() or path.is_symlink():
+            raise ValueError(f"Missing or unsafe local original for {form}: {path}")
+        if hashlib.sha256(path.read_bytes()).hexdigest() != meta["source_sha256"]:
+            raise ValueError(f"Local source PDF digest changed: {form}. Re-audit before review.")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--inventory", type=Path, required=True)
@@ -158,11 +170,15 @@ def main():
                     default=Path("config/ssa-canonical-seed-candidates.json"))
     ap.add_argument("--semantic", type=Path,
                     default=Path("config/ssa-semantic-review-batch1.json"))
+    ap.add_argument("--template-dir", type=Path, default=Path(".local/ssa-templates"),
+                    help="Original seven blank PDFs: SHA-256 must match source inventory")
     ap.add_argument("--out-dir", type=Path,
                     default=Path(".local/ssa-templates/crosswalk-review"))
     args = ap.parse_args()
+    inventory = json.loads(args.inventory.read_text(encoding="utf-8"))
+    verify_original_pdf_bytes(inventory, args.template_dir)
     result = verify(
-        json.loads(args.inventory.read_text(encoding="utf-8")),
+        inventory,
         json.loads(args.seed.read_text(encoding="utf-8")),
         json.loads(args.semantic.read_text(encoding="utf-8"))
     )
