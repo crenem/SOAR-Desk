@@ -56,6 +56,16 @@ python3 scripts/verify-ssa-semantic-review.py \
 
 Outputs `ssa-semantic-review-batch1.json` and `ssa-semantic-review-batch1.csv`, each explicitly review-only, retaining the exact source form, page and widget reference.
 
+Generate an additional source-linked **300 numbered-line question review queue** (these may include headings or partial questions and are never self-approved):
+
+```bash
+python3 scripts/build-ssa-question-review-ledger.py \
+  --inventory .local/ssa-templates/all-form-field-inventory.json \
+  --out .local/ssa-templates/ssa-numbered-question-review.csv
+```
+
+Each row retains the printed cue, page, source line ID, and *unverified* candidate branch/timeframe words, with empty respondent, timeframe, applicability and canonical approval columns for qualified review.
+
 ## Follow-on batch
 
 The next semantic pass should prioritize **employment and functional evidence** across SSA-3368, SSA-3369 and SSA-3373, then **SSI household, income and resources** in SSA-8000/8001. One job entry can inform multiple questions but **job type, physical demands, reporting period, applicant statement and source-verifiable facts are separate dimensions**. Narrative evidence from the local Qwen JSON worker must remain separate from the applicant's interview testimony until source-grounded practitioner review.
