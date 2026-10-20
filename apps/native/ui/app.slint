@@ -1,0 +1,150 @@
+import { Button, LineEdit, TextEdit, ComboBox, VerticalBox, HorizontalBox, ScrollView } from "std-widgets.slint";
+
+export component MainWindow inherits Window {
+    title: "SOAR Desk";
+    preferred-width: 1180px;
+    preferred-height: 760px;
+    background: #f6f8fb;
+    default-font-family: "Segoe UI";
+    in-out property <string> case-title: "No case selected";
+    in-out property <string> full-name: "";
+    in-out property <string> dob: "";
+    in-out property <string> field-state: "";
+    in-out property <string> source-list: "Upload a document to begin.";
+    in-out property <string> evidence-text: "Structured evidence will appear after pass 1.";
+    in-out property <string> summary-text: "The document summary will stream here during pass 2.";
+    in-out property <string> status-text: "Ready";
+    in-out property <string> model-status: "Local model not checked";
+    in-out property <bool> is-processing: false;
+    in-out property <bool> update-busy: false;
+    in-out property <bool> update-ready: false;
+    in-out property <string> update-info: "Updates";
+    callback check-updates();
+    callback install-update();
+    callback create-case();
+    callback pick-document();
+    callback analyze();
+    callback narrative();
+    callback save-field(string, string);
+    VerticalLayout {
+        padding: 18px;
+        spacing: 12px;
+        HorizontalLayout {
+            spacing: 12px;
+            Text { text: "SOAR Desk"; font-size: 25px; font-weight: 700; color: #203047; }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+            Text { text: root.status-text; color: #64748b; font-size: 13px; vertical-alignment: center; }
+            Text { text: root.update-info; color: #64748b; font-size: 11px; vertical-alignment: center; }
+            Button {
+                text: root.update-busy ? "Checking..." : "Updates";
+                enabled: !root.update-busy;
+                clicked => { root.check-updates(); }
+            }
+            if root.update-ready: Button {
+                text: "Install update";
+                enabled: !root.is-processing && !root.update-busy;
+                clicked => { root.install-update(); }
+            }
+            Button { text: "New case"; enabled: !root.is-processing; clicked => { root.create-case(); } }
+        }
+        Rectangle { background: #dbe3eb; height: 1px; }
+        HorizontalLayout {
+            spacing: 14px;
+            Rectangle {
+                background: #ffffff;
+                border-color: #e1e6ed;
+                border-width: 1px;
+                border-radius: 9px;
+                width: 285px;
+                VerticalLayout {
+                    padding: 15px;
+                    spacing: 12px;
+                    Text { text: "CASE & DOCUMENTS"; font-size: 12px; font-weight: 700; color: #718096; }
+                    Text { text: root.case-title; font-size: 18px; font-weight: 600; color: #223044; wrap: word-wrap; }
+                    Text { text: "Claimant"; font-size: 12px; color: #64748b; }
+                    Rectangle {
+                        height: 42px;
+                        background: #f9fbfd;
+                        border-color: #dce4ed;
+                        border-width: 1px;
+                        border-radius: 6px;
+                        HorizontalLayout {
+                            padding-left: 5px; padding-right: 9px;
+                            name-input := LineEdit {
+                                text: root.full-name;
+                                placeholder-text: "Full name";
+                                horizontal-stretch: 1;
+                                edited(v) => { root.full-name = v; root.save-field("claimant_name", v); }
+                            }
+                            Text { text: root.field-state; color: #2c8760; font-size: 12px; vertical-alignment: center; }
+                        }
+                    }
+                    Text { text: "Date of birth (YYYY-MM-DD)"; font-size: 12px; color: #64748b; }
+                    LineEdit {
+                        text: root.dob;
+                        placeholder-text: "YYYY-MM-DD";
+                        edited(v) => { root.dob = v; root.save-field("dob", v); }
+                    }
+                    Rectangle { background: #e8eef4; height: 1px; }
+                    Button { text: "+ Upload & analyze"; enabled: !root.is-processing; clicked => { root.pick-document(); } }
+                    Text { text: "EVIDENCE LIBRARY"; font-size: 12px; font-weight: 700; color: #718096; }
+                    ScrollView {
+                        vertical-stretch: 1;
+                        Text { text: root.source-list; font-size: 13px; color: #334155; wrap: word-wrap; }
+                    }
+                    Text { text: "Model: " + root.model-status; font-size: 11px; color: #6b7280; wrap: word-wrap; }
+                }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                background: #ffffff;
+                border-color: #e1e6ed;
+                border-width: 1px;
+                border-radius: 9px;
+                VerticalLayout {
+                    padding: 17px;
+                    spacing: 12px;
+                    HorizontalLayout {
+                        Text { text: "DOCUMENT ANALYSIS"; font-size: 12px; font-weight: 700; color: #718096; vertical-alignment: center; }
+                        Rectangle { horizontal-stretch: 1; background: transparent; }
+                        Button { text: "Retry analysis"; enabled: !root.is-processing; clicked => { root.analyze(); } }
+                        Button { text: "Generate narrative"; enabled: !root.is-processing; clicked => { root.narrative(); } }
+                    }
+                    Text { text: "Pass 1  /  Structured evidence"; font-size: 14px; font-weight: 600; color: #243a52; }
+                    Rectangle {
+                        height: 145px;
+                        border-color: #e5eaf0;
+                        border-width: 1px;
+                        border-radius: 6px;
+                        background: #f9fbfd;
+                        VerticalLayout {
+                            padding: 10px;
+                            TextEdit {
+                                text: root.evidence-text;
+                                read-only: true;
+                                vertical-stretch: 1;
+                            }
+                        }
+                    }
+                    Text { text: "Pass 2  /  Live document summary"; font-size: 14px; font-weight: 600; color: #243a52; }
+                    Rectangle {
+                        vertical-stretch: 1;
+                        border-color: #e5eaf0;
+                        border-width: 1px;
+                        border-radius: 6px;
+                        background: #f9fbfd;
+                        VerticalLayout {
+                            padding: 10px;
+                            TextEdit {
+                                text: root.summary-text;
+                                read-only: true;
+                                vertical-stretch: 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Text { text: "Local Windows preview  •  Versioned evidence  •  Automatic saving  •  Not yet approved for production PHI"; font-size: 11px; color: #8590a1; }
+    }
+}
