@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   clearScreen: false,
   server: {
-    port: 1420,
+    port: process.env.SOAR_DESK_DEVELOPMENT === "1" ? 1421 : 1420,
     strictPort: true,
     host: "127.0.0.1",
     // Cargo produces and locks executable build scripts. Never watch its output.
