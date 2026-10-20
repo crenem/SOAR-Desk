@@ -58,6 +58,7 @@ The underlying local inference service may be shared on loopback (GenieX port 18
 
 - Dev operator config: `~/.local/share/soar-desk-development-profile/config/soar-desk/operator.json`
 - Dev WebView app ID: `org.soardesk.community.development`
+- Dev model/backend logs and state: `~/.local/share/soar-desk-development-profile/state/` (separate from the original shortcut's WSL logs)
 - Dev source/PDF cache: `~/Projects/SOAR-Desk-SSA/.local/`
 - **Suggested fictional training-case directory:** `~/Projects/SOAR-Desk-SSA/.local/training-cases/`
 
@@ -74,7 +75,7 @@ git branch --show-current
 bash -n scripts/launch-development.sh scripts/launch-wsl.sh scripts/launch-wsl-cuda.sh
 ```
 
-Expected branch: `development/local`. If `git switch` or `git merge --ff-only` says local work would be overwritten or diverged, **stop and inspect rather than resetting**. Check developer logs in `~/.local/state/soar-desk/` and Windows `%LOCALAPPDATA%\SOAR Desk\logs`.
+Expected branch: `development/local`. If `git switch` or `git merge --ff-only` says local work would be overwritten or diverged, **stop and inspect rather than resetting**. Check development logs in `~/.local/share/soar-desk-development-profile/state/` and optional Windows GenieX logs in `%LOCALAPPDATA%\SOAR Desk\logs`.
 
 When developing a new feature branch, do so in a **different Git worktree** or temporarily close the development shortcut; this shortcut intentionally refuses to launch anything other than the designated integration branch.
 
