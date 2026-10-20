@@ -23,7 +23,6 @@ const CHANNEL: &str = match option_env!("SOAR_UPDATE_CHANNEL") {
 #[derive(Clone, Debug)]
 pub struct AvailableUpdate {
     pub version: Version,
-    pub tag: String,
     url: Url,
     sha256: String,
     size: u64,
@@ -125,7 +124,6 @@ fn choose_release(data: &Value, installed: &Version, allow_preview: bool) -> Res
             };
             newest = Some(AvailableUpdate {
                 version: version.clone(),
-                tag: tag.to_owned(),
                 url,
                 sha256: digest,
                 size,
