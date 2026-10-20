@@ -34,6 +34,13 @@ SQLite is the authoritative transactional store for all case state, document met
 - Database and vault backups must be consistent, restorable, encrypted at rest, and tested. Never silently discard pending edits on save errors; offer retry/recovery.
 - Acceptance tests: blur save, debounce save, keyboard tab save, rapid repeated edits, close/reopen, failed disk write, stale async response, migration, crash during save, AI/user conflict, and restoration from backup.
 
+## Minimalist inline field status UI
+- All per-field status markers appear inside the input boundary at its trailing edge, not in a separate line beneath the field.
+- Show an unobtrusive spinner while committing, a brief check after confirmed save (then fade), and a persistent warning/error icon for failed saves or verification conflicts. Tooltips or accessible descriptions explain state.
+- Reserve trailing icon space to prevent text overlap, maintain keyboard focus visibility and screen-reader status announcements, and never use color alone to distinguish states.
+- Keep errors inline by default; show explanatory text only on interaction or when remediation is required. Distinguish persistence errors from AI/source verification warnings.
+- No separate save controls for routine edits; blur and idle autosave remain mandatory.
+
 ## Reliability
 - Stream generation tokens through Rust async channels into the Slint UI with job and artifact IDs; cancellation and recovery.
 - Token budget and document chunking; map/reduce for large documents.
