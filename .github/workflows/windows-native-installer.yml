@@ -1,0 +1,53 @@
+name: Windows native Rust installer
+on:
+  push:
+    branches:
+      - main
+      - redesign/document-first-soar
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-installer:
+    runs-on: windows-2022
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test native case database
+        run: cargo test -p soar-native-store
+      - name: Compile Rust/Slint Windows application
+        run: cargo build --release -p soar-desk
+      - name: Acquire published llama.cpp Windows CPU engine
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $releases = Invoke-RestMethod 'https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=8' -Headers @{ 'User-Agent' = 'SOAR-Desk-Build' }
+          $asset = $releases | ForEach-Object { $_.assets } | Where-Object { $_.name -like '*bin-win-cpu-x64.zip' } | Select-Object -First 1
+          if (-not $asset) { throw 'No official Windows x64 CPU engine asset found' }
+          New-Item -ItemType Directory -Force -Path dist/runtime | Out-Null
+          Invoke-WebRequest $asset.browser_download_url -OutFile dist/llama-cpu.zip
+          Expand-Archive dist/llama-cpu.zip -DestinationPath dist/llama-unpacked -Force
+          Get-ChildItem dist/llama-unpacked -Recurse -File | Where-Object { $_.Extension -in @('.exe','.dll') } | ForEach-Object { Copy-Item $_.FullName dist/runtime/ -Force }
+          if (-not (Test-Path dist/runtime/llama-server.exe)) { throw 'llama-server.exe not present in downloaded engine' }
+          Write-Host ('Bundled inference engine: ' + $asset.name)
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+      - name: Package installer
+        shell: pwsh
+        run: |
+          $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $compiler)) { throw 'Inno Setup compiler missing' }
+          & $compiler apps/native/installer/SOAR-Desk.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path dist/installer/SOAR-Desk-Setup.exe)) { throw 'No installer generated' }
+          Get-FileHash dist/installer/SOAR-Desk-Setup.exe -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SOAR-Desk-Windows-Installer
+          path: dist/installer/SOAR-Desk-Setup.exe
+          if-no-files-found: error
+          retention-days: 30
