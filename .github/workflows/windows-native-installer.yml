@@ -8,6 +8,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: windows-native-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   windows-installer:
     runs-on: windows-2022
