@@ -48,6 +48,8 @@ function AuthenticatedWorkspace({operator,onLock,linked,profileId,onLinked}:{ope
   const [syntheticOnly,setSyntheticOnly]=useState(true);
   const [prefill,setPrefill]=useState<{caseReference:string;items:PrefillSuggestion[]}|null>(null);
   const [formTree,setFormTree]=useState<FormCoverage[]>([]);
+  const [interviewProgress,setInterviewProgress]=useState<{answered:number;possible:number}>({answered:0,possible:0});
+  const isDevelopmentBuild=import.meta.env.VITE_SOAR_DESK_DEVELOPMENT==="1";
   const [inboundEvidence,setInboundEvidence]=useState<{source:AttachedSource;caseReference:string;sequence:number;documentReview?:DocumentReviewRecord}|null>(null);
   const [jump,setJump]=useState<{target:MissingTarget;token:number}|null>(null);
   const [answers, setAnswers] = useState(initialAnswers);
@@ -84,7 +86,7 @@ function AuthenticatedWorkspace({operator,onLock,linked,profileId,onLinked}:{ope
   return <div className="desktop-frame"><WindowChrome/><div className="shell">
     <a href="#main" className="skip">Skip to main content</a>
     <aside className="sidebar" aria-label="Screening navigation">
-      <div className="brand"><span aria-hidden="true" className="brandmark">✳</span><span>SOAR <strong>Desk</strong><small>Community edition</small></span></div>
+      <div className="brand"><span aria-hidden="true" className="brandmark">✳</span><span>SOAR <strong>Desk</strong><small>{isDevelopmentBuild?"DEVELOPMENT · LOCAL PREVIEW":"Community edition"}</small></span></div>
       <div className="operator-sidebar">
        <span>Signed in: <strong>{operator}</strong></span>
        <button type="button" className="operator-lock-button" onClick={onLock}>Lock SOAR Desk</button>
@@ -101,20 +103,32 @@ function AuthenticatedWorkspace({operator,onLock,linked,profileId,onLinked}:{ope
       <button type="button" className={workspaceMode==="applications"&&appStage==="package"?"selected":""} onClick={()=>openApplicationStage("package")}>3 · Assemble package</button>
       <button type="button" className={workspaceMode==="screening"?"selected":""} onClick={()=>setWorkspaceMode("screening")}>Screening (optional)</button>
       </div>
-      {workspaceMode==="applications"&&<ProgressNav forms={formTree} onJump={target=>{
-        setJump(old=>({target,token:(old?.token??0)+1}));setWorkspaceMode("applications");setAppStage("interview");
-      }}/>}
+      {workspaceMode==="applications"&&<div className="interview-progress" aria-live="polite">
+        <div className="progress-heading">APPLICANT INTERVIEW <small>Mapped answer groups, not SSA form readiness</small></div>
+        <strong>{interviewProgress.answered} / {interviewProgress.possible} captured</strong>
+        <div className="progress-track" role="progressbar" aria-label="Canonical interview answers collected"
+          aria-valuemin={0} aria-valuemax={Math.max(1,interviewProgress.possible)} aria-valuenow={interviewProgress.answered}>
+          <span style={{width:(interviewProgress.possible?100*interviewProgress.answered/interviewProgress.possible:0)+"%"}}/>
+        </div>
+        <button type="button" className="progress-next" onClick={()=>openApplicationStage("unified")}>Continue applicant interview →</button>
+        <details className="advanced-source-navigation"><summary>SSA source field diagnostics (advanced)</summary>
+          <ProgressNav forms={formTree} onJump={target=>{
+            setJump(old=>({target,token:(old?.token??0)+1}));setWorkspaceMode("applications");setAppStage("interview");
+          }}/>
+        </details>
+      </div>}
       {workspaceMode==="screening"&&<ol className="steps">{steps.map((label,index) => <li key={label}><button className={index === step ? "active" : ""} aria-current={step === index ? "step" : undefined} onClick={() => {setStep(index);setError("");}}><span className="stepnumber">{index + 1}</span>{label}</button></li>)}</ol>}
       <div className="side-note"><strong>Restricted development build</strong><p>Encrypted local cases require independent nonprofit authorization and security review. Official SSA form/signing workflows remain incomplete.</p></div>
     </aside>
     <main id="main" className="main" tabIndex={-1}>
-      <header className="topbar"><span>Adult SSI/SSDI · {workspaceMode==="applications"?"Application preparation":workspaceMode==="documents"?"Evidence review":"Referral screening"}</span><span className="demo">{syntheticOnly?"SYNTHETIC DATA ONLY":"RESTRICTED LOCAL CASE · NOT DEPLOYMENT-APPROVED"}</span></header>
+      <header className="topbar"><span>{isDevelopmentBuild?"DEVELOPMENT · ":""}Adult SSI/SSDI · {workspaceMode==="applications"?"One interview, shared answers":workspaceMode==="documents"?"Source evidence review":"Referral screening"}</span><span className="demo">{syntheticOnly?"SYNTHETIC DATA ONLY":"RESTRICTED LOCAL CASE · NOT DEPLOYMENT-APPROVED"}</span></header>
       <div className="content" hidden={workspaceMode!=="applications"}><ApplicationWorkspace
         onCaseChange={setCaseReference}
         onCaseModeChange={setSyntheticOnly}
         prefill={prefill?.caseReference===caseReference?prefill.items:[]}
         onPrefillApplied={()=>setPrefill(null)}
         onProgress={setFormTree}
+        onInterviewProgress={setInterviewProgress}
         navigate={jump}
         stageJump={stageJump}
         inboundEvidence={inboundEvidence}
