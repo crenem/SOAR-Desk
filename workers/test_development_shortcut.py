@@ -57,6 +57,10 @@ class DevelopmentLauncherTests(unittest.TestCase):
         self.assertIn("Launch SOAR Desk Development.cmd",installer)
         self.assertIn("development/local",installer)
         self.assertIn("SOAR_DEV_ACCELERATOR=",installer)
+        # The WSL launcher owns the branch check; nested PowerShell WSL/git
+        # can falsely reject an otherwise valid active branch.
+        self.assertNotIn("$checkedOutBranch",installer)
+        self.assertIn("actual_branch", (ROOT/"scripts/launch-development.sh").read_text())
         self.assertNotIn("SOAR Desk.lnk",installer)
         self.assertNotIn("SOAR Desk - NVIDIA CUDA.lnk",installer)
         self.assertNotIn("reset --hard",installer)
