@@ -82,9 +82,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          VERSION="$(sed -n 's/^version = "\\([^"]*\\)"/\\1/p' apps/native/Cargo.toml | head -1)"
+          VERSION="$(python3 -c 'import tomllib; print(tomllib.load(open("apps/native/Cargo.toml", "rb"))["package"]["version"])')"
           test -n "$VERSION"
+          echo "Publishing version: $VERSION"
           grep -Fq "#define MyAppVersion \"$VERSION\"" apps/native/installer/SOAR-Desk.iss
+          ls -lh dist/installer/
           test -s dist/installer/SOAR-Desk-Setup.exe
           TAG="v$VERSION"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
