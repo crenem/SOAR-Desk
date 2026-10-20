@@ -257,20 +257,78 @@ def inspect_blank(pdf_path: Path, form_id: str) -> dict:
         document.close()
 
 
-def audit_dir(folder: Path) -> dict:
+def read_download_manifest(folder):
+    """Verify recorded HTTPS download source and SHA, never trust filename alone.
+
+    The fetch helper writes manifest.tsv with: filename, sha256, bytes, source.
+    An intact manifest corroborates a particular local download, but it does
+    NOT prove the edition is current or approve any field interpretation.
+    """
+    manifest = folder / "manifest.tsv"
+    if not manifest.is_file() or manifest.is_symlink():
+        return None
+    with manifest.open("r", encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream, delimiter="\t")
+        if not {"filename", "sha256", "bytes", "source"}.issubset(reader.fieldnames or []):
+            raise ValueError("Source manifest is missing required columns")
+        listed = {}
+        for item in reader:
+            name = item["filename"]
+            if name in listed or "/" in name or "\\" in name or not name:
+                raise ValueError("Duplicate or unsafe filename in source manifest")
+            if not re.fullmatch(r"[0-9a-fA-F]{64}", item["sha256"] or ""):
+                raise ValueError("Invalid downloaded PDF digest in source manifest")
+            try:
+                length = int(item["bytes"])
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Invalid source byte count") from exc
+            if length <= 0:
+                raise ValueError("Invalid source byte count")
+            listed[name] = {
+                "sha256": item["sha256"].lower(),
+                "bytes": length, "url": item["source"],
+            }
+        return listed
+
+
+def validate_download_manifest(form, entry):
+    if entry is None:
+        return "NO_DOWNLOAD_MANIFEST_OFFICIAL_SOURCE_UNCONFIRMED"
+    if (entry["sha256"] != form["source_sha256"] or
+        entry["bytes"] != form["source_bytes"] or
+        entry["url"] != form["official_source_url"]):
+        raise ValueError("Cached PDF differs from recorded official SSA HTTPS download")
+    return "MATCHES_LOCAL_HTTPS_DOWNLOAD_MANIFEST_EDITION_NOT_VISUALLY_VERIFIED"
+
+
+def audit_dir(folder: Path, require_download_manifest=False) -> dict:
     result = {
         "inventory_schema_version": 2,
         "status": "UNREVIEWED_SOURCE_CANDIDATES_NOT_SSA_READY",
         "forms": {}, "missing": [], "errors": {},
         "disclaimer": "Complete local machine inventory is not a verified SSA field crosswalk.",
     }
+    try:
+        download_manifest = read_download_manifest(folder)
+    except (OSError, ValueError, UnicodeError) as exc:
+        result["errors"]["download_manifest"] = str(exc)
+        download_manifest = None
+    if require_download_manifest and download_manifest is None:
+        result["errors"]["download_manifest"] = (
+            "A recorded SSA download manifest is required; run fetch-ssa-templates.sh"
+        )
     for form_id, filename in FORM_CATALOG.items():
         source = folder / filename
         if not source.is_file():
             result["missing"].append(form_id)
             continue
         try:
-            result["forms"][form_id] = inspect_blank(source, form_id)
+            form = inspect_blank(source, form_id)
+            form["source_verification"] = validate_download_manifest(
+                form, download_manifest.get(filename) if download_manifest else None)
+            if not download_manifest:
+                form["warnings"].append("NO_LOCAL_DOWNLOAD_MANIFEST")
+            result["forms"][form_id] = form
         except (OSError, ValueError, RuntimeError, fitz.FileDataError) as exc:
             result["errors"][form_id] = str(exc)
     return result
@@ -343,10 +401,12 @@ def main():
                         default=Path(".local/ssa-templates/all-form-field-inventory.json"))
     parser.add_argument("--review-queue", type=Path, default=None,
                         help="A CSV of every printed line and widget, marked UNREVIEWED")
+    parser.add_argument("--require-download-manifest", action="store_true",
+                        help="Fail if source PDF digest/URL cannot be reconciled to local official download manifest")
     parser.add_argument("--compare-baseline", type=Path, default=None,
                         help="Prior generated JSON; changed source hashes require reaudit")
     args = parser.parse_args()
-    inventory = audit_dir(args.template_dir)
+    inventory = audit_dir(args.template_dir, require_download_manifest=args.require_download_manifest)
     if args.compare_baseline:
         baseline = json.loads(args.compare_baseline.read_text(encoding="utf-8"))
         inventory["source_version_changes"] = compare_baseline(inventory, baseline)
