@@ -16,6 +16,11 @@ export component MainWindow inherits Window {
     in-out property <string> status-text: "Ready";
     in-out property <string> model-status: "Local model not checked";
     in-out property <bool> is-processing: false;
+    in-out property <bool> update-busy: false;
+    in-out property <bool> update-ready: false;
+    in-out property <string> update-info: "Updates";
+    callback check-updates();
+    callback install-update();
     callback create-case();
     callback pick-document();
     callback analyze();
@@ -29,6 +34,17 @@ export component MainWindow inherits Window {
             Text { text: "SOAR Desk"; font-size: 25px; font-weight: 700; color: #203047; }
             Rectangle { horizontal-stretch: 1; background: transparent; }
             Text { text: root.status-text; color: #64748b; font-size: 13px; vertical-alignment: center; }
+            Text { text: root.update-info; color: #64748b; font-size: 11px; vertical-alignment: center; }
+            Button {
+                text: root.update-busy ? "Checking..." : "Updates";
+                enabled: !root.update-busy;
+                clicked => { root.check-updates(); }
+            }
+            if root.update-ready: Button {
+                text: "Install update";
+                enabled: !root.is-processing && !root.update-busy;
+                clicked => { root.install-update(); }
+            }
             Button { text: "New case"; enabled: !root.is-processing; clicked => { root.create-case(); } }
         }
         Rectangle { background: #dbe3eb; height: 1px; }
