@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # SOAR Desk development launcher. Synthetic test documents only.
 set -Eeuo pipefail
-ROOT="$HOME/Projects/SOAR-Desk"
+ROOT="${SOAR_DESK_ROOT:-$HOME/Projects/SOAR-Desk}"
+UPDATE_BRANCH="${SOAR_DESK_UPDATE_BRANCH:-main}"
+DEVELOPMENT="${SOAR_DESK_DEVELOPMENT:-0}"
 LLAMA="$HOME/Projects/llama.cpp"
 MODEL_REPO="Qwen/Qwen3-4B-GGUF:Q4_K_M"
 PORT=8080
@@ -12,8 +14,8 @@ cd "$ROOT"
 if [[ "${SOAR_LAUNCH_UPDATED:-0}" != 1 ]]; then
   echo "== SOAR Desk | update, setup, launch =="
   if git diff --quiet && git diff --cached --quiet; then
-    if git fetch origin main; then
-      if ! git merge --ff-only origin/main; then
+    if git fetch origin "$UPDATE_BRANCH"; then
+      if ! git merge --ff-only "origin/$UPDATE_BRANCH"; then
         echo "Cannot fast-forward; leaving files untouched." >&2
         exit 1
       fi
@@ -59,13 +61,13 @@ if [[ ! -x "$ROOT/.venv-laya/bin/python" ]]; then
   echo "Installing local Python environment for Laya..."
   python3 -m venv "$ROOT/.venv-laya"
 fi
-if ! "$ROOT/.venv-laya/bin/python" -c "import laya" >/dev/null 2>&1; then
+if [[ "$DEVELOPMENT" != 1 ]] && ! "$ROOT/.venv-laya/bin/python" -c "import laya" >/dev/null 2>&1; then
   "$ROOT/.venv-laya/bin/python" -m pip install 'laya>=0.3.21'
 fi
 
 # Checkpoints are downloaded once, then used offline by the document worker.
 LAYA_MARKER="$HOME/.local/state/soar-desk/laya-provisioned"
-if [[ ! -f "$LAYA_MARKER" ]]; then
+if [[ "$DEVELOPMENT" != 1 && ! -f "$LAYA_MARKER" ]]; then
   echo "Provisioning Laya English and multilingual checkpoints (first run only)..."
   if "$ROOT/.venv-laya/bin/python" -c 'from laya import Router; Router(device="cpu").preload(["english", "multilingual"])'; then
     touch "$LAYA_MARKER"
@@ -159,4 +161,9 @@ trap cleanup EXIT INT TERM
 cd "$ROOT/apps/desktop"
 npm install --no-audit --no-fund
 echo "Launching SOAR Desk (close this window to stop development session)..."
-npm run tauri dev
+if [[ "$DEVELOPMENT" == 1 ]]; then
+  echo "Isolated SOAR Desk development profile; original SOAR Desk shortcut is unchanged."
+  npm run tauri dev -- --config src-tauri/tauri.development.conf.json
+else
+  npm run tauri dev
+fi
