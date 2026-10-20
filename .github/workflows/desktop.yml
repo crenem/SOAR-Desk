@@ -35,4 +35,5 @@ jobs:
       - run: python -m unittest discover -s ../../workers -p test_propose_ssa_crosswalk.py
       - run: python -m unittest discover -s ../../workers -p test_verify_ssa_semantics.py
       - run: python -m unittest discover -s ../../workers -p test_ssa_question_ledger.py
+      - run: python -m unittest discover -s ../../workers -p test_development_shortcut.py
       - run: npm run build
