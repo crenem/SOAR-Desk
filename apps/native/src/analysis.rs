@@ -8,9 +8,12 @@ pub const MODEL_SHA256:&str="3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6
 const API:&str="http://127.0.0.1:18081/v1/chat/completions";
 
 pub fn read_pages(path:&Path)->Result<String,String>{
-    let ext=path.extension().and_then(|x|x.to_str()).unwrap_or("").to_ascii_lowercase();
-    if ext=="txt"||ext=="md" {return fs::read_to_string(path).map(|t|format!("[Page 1]\n{t}")).map_err(|e|e.to_string());}
-    if ext!="pdf" {return Err("Image OCR is not yet implemented in the native preview. Choose a text PDF.".into())}
+    // Originals use SHA-256 filenames without file extensions in the vault.
+    let bytes=fs::read(path).map_err(|e|e.to_string())?;
+    if !bytes.starts_with(b"%PDF-") {
+        return String::from_utf8(bytes).map(|t|format!("[Page 1]\\n{t}"))
+            .map_err(|_|"Image OCR is not yet implemented in the native preview. Choose a text PDF.".into());
+    }
     let doc=lopdf::Document::load(path).map_err(|e|format!("PDF open: {e}"))?;
     let mut output=String::new();
     for (page,_) in doc.get_pages(){
