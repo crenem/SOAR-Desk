@@ -131,7 +131,7 @@ else
       echo "Port $PORT is in use by an unknown service; refusing to reuse it." >&2; exit 1
     fi
     echo "Starting local Qwen3 4B server (first launch downloads model weights)..."
-    "$LLAMA/build/bin/llama-server" -hf "$MODEL_REPO" --host 127.0.0.1 \
+    "$LLAMA/build/bin/llama-server" -hf "$MODEL_REPO" --alias qwen3-4b --host 127.0.0.1 \
       --port "$PORT" -c 2048 -ngl 0 >"$LOG" 2>&1 &
     server_pid=$!
     for ((i=0; i<900; i++)); do
@@ -152,6 +152,19 @@ else
     done
   fi
   
+fi
+
+# The local worker sends a strict "qwen3-4b" model ID. Refuse to route a
+# synthetic document to an unrelated service that happens to own port 8080.
+if [[ "$DEVELOPMENT" == 1 && "${SOAR_QWEN_BACKEND:-}" == "cpu" ]]; then
+  model_json="$(curl -fsS --max-time 5 "http://127.0.0.1:$PORT/v1/models")" || {
+    echo "Cannot verify the local Qwen model service." >&2
+    exit 1
+  }
+  if ! printf '%s' "$model_json" | python3 -c 'import json,sys; m=json.load(sys.stdin).get("data",[]); sys.exit(0 if any(x.get("id")=="qwen3-4b" for x in m) else 1)'; then
+    echo "Local model port $PORT is not serving expected alias qwen3-4b. Stop the conflicting model process before running development." >&2
+    exit 1
+  fi
 fi
 
 cleanup() {
