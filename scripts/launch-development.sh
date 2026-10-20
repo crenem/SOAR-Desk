@@ -27,11 +27,12 @@ fi
 # Case vaults are file-picker-selected and MUST use different development paths.
 umask 077
 profile="$HOME/.local/share/soar-desk-development-profile"
-mkdir -p "$profile/config" "$profile/data" "$profile/cache" "$DEV_ROOT/.local/training-cases"
-chmod 700 "$profile" "$profile/config" "$profile/data" "$profile/cache" "$DEV_ROOT/.local/training-cases"
+mkdir -p "$profile/config" "$profile/data" "$profile/cache" "$profile/state" "$DEV_ROOT/.local/training-cases"
+chmod 700 "$profile" "$profile/config" "$profile/data" "$profile/cache" "$profile/state" "$DEV_ROOT/.local/training-cases"
 export XDG_CONFIG_HOME="$profile/config"
 export XDG_DATA_HOME="$profile/data"
 export XDG_CACHE_HOME="$profile/cache"
+export SOAR_DESK_STATE_DIR="$profile/state"
 
 export SOAR_DESK_ROOT="$DEV_ROOT"
 export SOAR_DESK_UPDATE_BRANCH="$DEV_BRANCH"
