@@ -213,9 +213,7 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
  const current=FORM_BY_ID[formId];
  const validCurrent=activeForms.some(f=>f.id===formId)?current:activeForms[0];
  const activeSection=validCurrent?.sections.find(s=>s.id===section)??validCurrent?.sections[0];
- const total=activeForms.filter(f=>!f.referenceOnly).map(f=>({f,p:progress(f,answers,rows)}));
- const captured=total.reduce((n,x)=>n+x.p.captured,0);
- const possible=total.reduce((n,x)=>n+x.p.total,0);
+
  const sections=validCurrent?.sections??[];
  function hasCaseContent(){
   const state=snapshotRef.current;
@@ -519,11 +517,21 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
    {view==="review"&&<section className="panel">
     <h2>Applicant interview: outstanding answers</h2>
     <p className="intro"><strong>{unifiedStats.answered} / {unifiedStats.possible}</strong> unique mapped interview groups captured. This does not measure whether SSA will accept a particular form.</p>
-    {total.map(({f,p})=><details key={f.id} className="intake-review" open={p.captured<p.total}>
-      <summary><strong>{f.id}</strong> — {p.captured}/{p.total} captured · {p.verified} human-verified</summary>
-      <p className="hint">{f.note}</p>
-      {f.sections.map(s=>{const pending=s.questions.filter(q=>applicable(q,answers)).filter(q=>{const a=answers[q.key];return !a || (!a.value.trim()&&a.status!=="unknown");});return pending.length?<div key={s.id}><strong>{s.title}</strong><p className="hint">{pending.map(q=>q.ref+": "+q.label).join(" · ")}</p></div>:null;})}
-    </details>)}
+    {unifiedIndex.domains.map(domain=>{
+      const questions=domain.questions.filter(q=>applicable(q,answers));
+      const missing=questions.filter(q=>!answers[q.key]?.value.trim()&&answers[q.key]?.status!=="unknown");
+      const collections=domain.collections.filter(c=>applicable(c,answers));
+      const remainingGroups=collections.filter(c=>!(rows[c.key]??[]).some(row=>Object.entries(row).some(([key,val])=>!key.startsWith("_")&&Boolean(val.trim()))));
+      const pending=missing.length+remainingGroups.length;
+      return <details key={domain.id} className="intake-review" open={pending>0}>
+        <summary><strong>{domain.title}</strong> — {pending?pending+" mapped groups to address":"Mapped groups captured"}</summary>
+        {pending>0?<div className="review">
+         {missing.map(q=><p className="hint" key={q.key}>{q.label}</p>)}
+         {remainingGroups.map(c=><p className="hint" key={c.key}>{c.label}</p>)}
+         <button type="button" className="secondary" onClick={()=>{setDomainId(domain.id);setView("unified");}}>Continue this interview section →</button>
+        </div>:<p className="hint">All currently mapped groups in this section have responses; official-form coverage is not yet verified.</p>}
+       </details>;
+    })}
     <div className="example"><strong>Not ready for an SSA submission</strong><p>Only a limited SSA-16 synthetic PDF preview is implemented. Complete field mapping, other SSA PDF population, applicant review, physical signatures, SSA submission requirements, protected storage and audit trails remain unfinished. No claim has been filed or signed.</p></div>
     <p><strong>Current synthetic case:</strong> {caseLabel}</p>
     <p><strong>Applicant:</strong> {display(answers["person.name"])} · <strong>Onset:</strong> {display(answers["work.onset"])} · <strong>Reported living arrangement:</strong> {display(answers["living.type"])}</p>
