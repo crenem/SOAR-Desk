@@ -18,7 +18,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # WSL's direct `printenv HOME` may return empty when invoked from
 # PowerShell launched inside WSL. A login shell resolves HOME from passwd.
-$homeLines = @(& wsl.exe -d $Distribution -e bash -lc 'printf "%s\\n" "$HOME"')
+$homeLines = @(& wsl.exe -d $Distribution -e bash -lc 'echo "$HOME"')
 $homeExitCode = $LASTEXITCODE
 $linuxHome = @($homeLines | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Last 1)
 if ($homeExitCode -ne 0 -or $linuxHome.Count -ne 1) {
