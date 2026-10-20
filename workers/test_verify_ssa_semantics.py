@@ -144,6 +144,26 @@ class SemanticReviewTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"Every candidate"):
             m.verify(i,s,r)
 
+    def test_rejects_source_bytes_that_differ_from_inventory(self):
+        i,s,r=fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            for form,meta in i["forms"].items():
+                meta["source_filename"]=form+".pdf"
+                (root/meta["source_filename"]).write_bytes(form.encode())
+            m.verify_original_pdf_bytes(i,root)
+            (root/"SSA-827.pdf").write_bytes(b"changed")
+            with self.assertRaisesRegex(ValueError,"digest changed"):
+                m.verify_original_pdf_bytes(i,root)
+
+    def test_rejects_two_same_page_widget_leaves(self):
+        i,s,r=fixture()
+        src=i["forms"]["SSA-3373-BK"]["pages"][2]["interactive_widgets"][0].copy()
+        src["item_id"]="different-widget"
+        i["forms"]["SSA-3373-BK"]["pages"][2]["interactive_widgets"].append(src)
+        with self.assertRaisesRegex(ValueError,"Ambiguous"):
+            m.verify(i,s,r)
+
     def test_fail_closed_when_source_form_missing(self):
         i,s,r=fixture()
         i["forms"].pop("SSA-827")
