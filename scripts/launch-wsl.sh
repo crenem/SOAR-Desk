@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 # SOAR Desk development launcher. Synthetic test documents only.
 set -Eeuo pipefail
-ROOT="$HOME/Projects/SOAR-Desk"
+ROOT="${SOAR_DESK_ROOT:-$HOME/Projects/SOAR-Desk}"
+UPDATE_BRANCH="${SOAR_DESK_UPDATE_BRANCH:-main}"
+DEVELOPMENT="${SOAR_DESK_DEVELOPMENT:-0}"
 LLAMA="$HOME/Projects/llama.cpp"
 MODEL_REPO="Qwen/Qwen3-4B-GGUF:Q4_K_M"
 PORT=8080
-mkdir -p "$HOME/.local/state/soar-desk"
-LOG="$HOME/.local/state/soar-desk/llama-server.log"
+STATE_DIR="${SOAR_DESK_STATE_DIR:-$HOME/.local/state/soar-desk}"
+mkdir -p "$STATE_DIR"
+LOG="$STATE_DIR/llama-server.log"
 cd "$ROOT"
 # Synchronize once, then execute the newly fetched launcher without a second fetch.
 if [[ "${SOAR_LAUNCH_UPDATED:-0}" != 1 ]]; then
   echo "== SOAR Desk | update, setup, launch =="
   if git diff --quiet && git diff --cached --quiet; then
-    if git fetch origin main; then
-      if ! git merge --ff-only origin/main; then
+    if git fetch origin "$UPDATE_BRANCH"; then
+      if ! git merge --ff-only "origin/$UPDATE_BRANCH"; then
         echo "Cannot fast-forward; leaving files untouched." >&2
         exit 1
       fi
@@ -59,13 +62,13 @@ if [[ ! -x "$ROOT/.venv-laya/bin/python" ]]; then
   echo "Installing local Python environment for Laya..."
   python3 -m venv "$ROOT/.venv-laya"
 fi
-if ! "$ROOT/.venv-laya/bin/python" -c "import laya" >/dev/null 2>&1; then
+if [[ "$DEVELOPMENT" != 1 ]] && ! "$ROOT/.venv-laya/bin/python" -c "import laya" >/dev/null 2>&1; then
   "$ROOT/.venv-laya/bin/python" -m pip install 'laya>=0.3.21'
 fi
 
 # Checkpoints are downloaded once, then used offline by the document worker.
-LAYA_MARKER="$HOME/.local/state/soar-desk/laya-provisioned"
-if [[ ! -f "$LAYA_MARKER" ]]; then
+LAYA_MARKER="$STATE_DIR/laya-provisioned"
+if [[ "$DEVELOPMENT" != 1 && ! -f "$LAYA_MARKER" ]]; then
   echo "Provisioning Laya English and multilingual checkpoints (first run only)..."
   if "$ROOT/.venv-laya/bin/python" -c 'from laya import Router; Router(device="cpu").preload(["english", "multilingual"])'; then
     touch "$LAYA_MARKER"
@@ -128,7 +131,7 @@ else
       echo "Port $PORT is in use by an unknown service; refusing to reuse it." >&2; exit 1
     fi
     echo "Starting local Qwen3 4B server (first launch downloads model weights)..."
-    "$LLAMA/build/bin/llama-server" -hf "$MODEL_REPO" --host 127.0.0.1 \
+    "$LLAMA/build/bin/llama-server" -hf "$MODEL_REPO" --alias qwen3-4b --host 127.0.0.1 \
       --port "$PORT" -c 2048 -ngl 0 >"$LOG" 2>&1 &
     server_pid=$!
     for ((i=0; i<900; i++)); do
@@ -151,6 +154,19 @@ else
   
 fi
 
+# The local worker sends a strict "qwen3-4b" model ID. Refuse to route a
+# synthetic document to an unrelated service that happens to own port 8080.
+if [[ "$DEVELOPMENT" == 1 && "${SOAR_QWEN_BACKEND:-}" == "cpu" ]]; then
+  model_json="$(curl -fsS --max-time 5 "http://127.0.0.1:$PORT/v1/models")" || {
+    echo "Cannot verify the local Qwen model service." >&2
+    exit 1
+  }
+  if ! printf '%s' "$model_json" | python3 -c 'import json,sys; m=json.load(sys.stdin).get("data",[]); sys.exit(0 if any(x.get("id")=="qwen3-4b" for x in m) else 1)'; then
+    echo "Local model port $PORT is not serving expected alias qwen3-4b. Stop the conflicting model process before running development." >&2
+    exit 1
+  fi
+fi
+
 cleanup() {
   if [[ -n "$server_pid" ]]; then kill "$server_pid" 2>/dev/null || true; fi
 }
@@ -159,4 +175,9 @@ trap cleanup EXIT INT TERM
 cd "$ROOT/apps/desktop"
 npm install --no-audit --no-fund
 echo "Launching SOAR Desk (close this window to stop development session)..."
-npm run tauri dev
+if [[ "$DEVELOPMENT" == 1 ]]; then
+  echo "Isolated SOAR Desk development profile; original SOAR Desk shortcut is unchanged."
+  npm run tauri dev -- --config src-tauri/tauri.development.conf.json
+else
+  npm run tauri dev
+fi

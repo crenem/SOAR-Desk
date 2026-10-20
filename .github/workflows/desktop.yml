@@ -19,6 +19,7 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run test:forms
       - run: npm run test:unified
+      - run: npm run test:interview-navigation
       - run: npm run test:submissions
       - run: npm run test:workflow
       - run: npm run test:fields
@@ -35,4 +36,5 @@ jobs:
       - run: python -m unittest discover -s ../../workers -p test_propose_ssa_crosswalk.py
       - run: python -m unittest discover -s ../../workers -p test_verify_ssa_semantics.py
       - run: python -m unittest discover -s ../../workers -p test_ssa_question_ledger.py
+      - run: python -m unittest discover -s ../../workers -p test_development_shortcut.py
       - run: npm run build

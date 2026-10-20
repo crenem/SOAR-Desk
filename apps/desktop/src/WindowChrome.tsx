@@ -3,6 +3,7 @@ import {getCurrentWindow} from "@tauri-apps/api/window";
 
 /** Accessible window controls backed by actual Tauri window commands. */
 export default function WindowChrome(){
+ const isDevelopmentBuild=import.meta.env.VITE_SOAR_DESK_DEVELOPMENT==="1";
  const [maximized,setMaximized]=useState(false);
  const [problem,setProblem]=useState("");
  useEffect(()=>{
@@ -26,7 +27,7 @@ export default function WindowChrome(){
   <div className="window-drag" data-tauri-drag-region onDoubleClick={()=>void action("maximize")} title="Drag to move, double-click to maximize or restore">
    <span data-tauri-drag-region className="window-appname">SOAR Desk</span>
    <span data-tauri-drag-region className="window-separator">—</span>
-   <span data-tauri-drag-region className="window-mode">Community edition</span>
+   <span data-tauri-drag-region className="window-mode">{isDevelopmentBuild?"DEVELOPMENT · Local preview":"Community edition"}</span>
   </div>
   {problem&&<span role="alert" className="window-error">{problem}</span>}
   <div className="window-controls" aria-label="Window controls">

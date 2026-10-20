@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "SOAR Desk Development",
+  "identifier": "org.soardesk.community.development",
+  "build": {
+    "devUrl": "http://localhost:1421"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "SOAR Desk - Development",
+        "width": 1220,
+        "height": 820,
+        "minWidth": 780,
+        "minHeight": 600,
+        "decorations": false,
+        "resizable": true,
+        "maximizable": true,
+        "minimizable": true,
+        "closable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost http://localhost:1421 ws://localhost:1421"
+    }
+  }
+}

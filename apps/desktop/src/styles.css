@@ -171,3 +171,15 @@
 .operator-zitadel .error{color:#733728}
 .operator-zitadel .success{color:#d2fff0}
 .operator-zitadel code{font-size:11px;overflow-wrap:anywhere}
+
+/* Applicant-centered information architecture. SSA question/field diagnostics
+ * remain accessible to developers but do not dominate practitioner workflow. */
+.interview-progress{border-top:1px solid #426073;margin:3px 0 12px;padding:18px 7px 14px;color:#e5f3f6}
+.interview-progress>strong{display:block;font-size:15px;letter-spacing:.01em;margin:0 5px 10px}
+.interview-progress .progress-track{height:6px}
+.advanced-source-navigation{margin:14px 5px 0;border-top:1px solid #385b6c;padding-top:13px}
+.advanced-source-navigation summary{cursor:pointer;font-size:11px;color:#b9d0d9;line-height:1.4}
+.advanced-source-navigation .form-progress{margin-top:12px}
+.advanced-mapping-tools{margin:6px 0 17px;padding:10px 14px;border:1px solid #dce6eb;background:#f6fafb;border-radius:9px}
+.advanced-mapping-tools>summary{cursor:pointer;font-size:12px;color:#436374;font-weight:650}
+.advanced-mapping-tools .intake-tabs{margin-top:8px}
