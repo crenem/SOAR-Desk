@@ -137,6 +137,19 @@ impl Store {
         tx.commit()?;
         Ok(Artifact{id,case_id,document_id,kind:kind.into(),version,status:status.into(),body:body.into()})
     }
+    pub fn recent_case(&self) -> Result<Option<(i64, String)>> {
+        Ok(self.db.query_row("SELECT id,title FROM cases ORDER BY id DESC LIMIT 1", [], |r| Ok((r.get(0)?,r.get(1)?))).optional()?)
+    }
+    pub fn documents(&self, case_id:i64) -> Result<Vec<(i64, String, String)>> {
+        let mut q=self.db.prepare("SELECT id,filename,vault_path FROM documents WHERE case_id=?1 ORDER BY id DESC")?;
+        let rows=q.query_map([case_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
+        Ok(rows.collect::<std::result::Result<Vec<_>,_>>()?)
+    }
+    /// Checkpoint the live job without replacing completed artifacts.
+    pub fn checkpoint_job(&self,case_id:i64,document_id:i64,stage:&str,status:&str,partial:&str)->Result<()> {
+        self.db.execute("INSERT INTO jobs(case_id,document_id,stage,status,partial_output,updated_at) VALUES(?1,?2,?3,?4,?5,?6)",params![case_id,document_id,stage,status,partial,now()])?;
+        Ok(())
+    }
     pub fn artifacts(&self,case_id:i64)->Result<Vec<Artifact>> {
         let mut q=self.db.prepare("SELECT id,case_id,document_id,kind,version,status,body FROM artifacts WHERE case_id=?1 ORDER BY id")?;
         let rows=q.query_map([case_id],|r|Ok(Artifact{id:r.get(0)?,case_id:r.get(1)?,document_id:r.get(2)?,kind:r.get(3)?,version:r.get(4)?,status:r.get(5)?,body:r.get(6)?}))?;
