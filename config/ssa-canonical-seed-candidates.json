@@ -1,0 +1,321 @@
+{
+  "schema_version": 1,
+  "description": "Human-review-only canonical candidate seed; no SSA PDF writes, claims or auto approvals",
+  "candidates": [
+    {
+      "form_id": "SSA-16",
+      "page": 1,
+      "widget_leaf": "N1FLD_FLD[0]",
+      "canonical_key": "person.name",
+      "source_cue": "PRINT your name",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-16",
+      "page": 1,
+      "widget_leaf": "N2FLD_FLD[0]",
+      "canonical_key": "person.ssn",
+      "source_cue": "Enter your Social Security Number",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-16",
+      "page": 1,
+      "widget_leaf": "N4A_FLD[0]",
+      "canonical_key": "person.dob",
+      "source_cue": "Enter your date of birth",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-16",
+      "page": 1,
+      "widget_leaf": "N3Speak_FLD[0]",
+      "canonical_key": "person.preferred_language.spoken",
+      "source_cue": "language you prefer to:",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-16",
+      "page": 1,
+      "widget_leaf": "N3Write_FLD[0]",
+      "canonical_key": "person.preferred_language.written",
+      "source_cue": "language you prefer to:",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-8000-BK",
+      "page": 1,
+      "widget_leaf": "P1_Q1AName_FLD[0]",
+      "canonical_key": "person.name",
+      "source_cue": "First Name, Middle Initial, Last Name",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-8000-BK",
+      "page": 1,
+      "widget_leaf": "P1_Q1ASSN_FLD[0]",
+      "canonical_key": "person.ssn",
+      "source_cue": "Social Security Number",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-8000-BK",
+      "page": 1,
+      "widget_leaf": "P1_Q1ABday_FLD[0]",
+      "canonical_key": "person.dob",
+      "source_cue": "Birthdate",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-8000-BK",
+      "page": 1,
+      "widget_leaf": "P1_Written_FLD[0]",
+      "canonical_key": "person.preferred_language.written",
+      "source_cue": "Preferred Language",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-8000-BK",
+      "page": 1,
+      "widget_leaf": "P1_Spoken_FLD[0]",
+      "canonical_key": "person.preferred_language.spoken",
+      "source_cue": "Preferred Language",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-8000-BK",
+      "page": 1,
+      "widget_leaf": "P1_Q2Address_FLD[0]",
+      "canonical_key": "person.mailing.street",
+      "source_cue": "Applicant's Mailing Address",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-8000-BK",
+      "page": 1,
+      "widget_leaf": "P1_Q2ZIP_FLD[0]",
+      "canonical_key": "person.mailing.postal_code",
+      "source_cue": "ZIP Code/Postal Code",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-8001-BK",
+      "page": 1,
+      "widget_leaf": "P1-N1A-FLD[0]",
+      "canonical_key": "person.name",
+      "source_cue": "First Name, Middle Initial, Last Name",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-8001-BK",
+      "page": 1,
+      "widget_leaf": "P1-N1B-FLD[0]",
+      "canonical_key": "person.dob",
+      "source_cue": "Birthdate",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-8001-BK",
+      "page": 1,
+      "widget_leaf": "P1-N1C-FLD[0]",
+      "canonical_key": "person.ssn",
+      "source_cue": "Social Security Number",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-8001-BK",
+      "page": 1,
+      "widget_leaf": "P1-PreferredWritten-FLD[0]",
+      "canonical_key": "person.preferred_language.written",
+      "source_cue": "Preferred Language",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-8001-BK",
+      "page": 1,
+      "widget_leaf": "P1-PreferredSpoken-FLD[0]",
+      "canonical_key": "person.preferred_language.spoken",
+      "source_cue": "Preferred Language",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-3368-BK",
+      "page": 3,
+      "widget_leaf": "P3_N1A_FLD[0]",
+      "canonical_key": "person.name",
+      "source_cue": "1.A.  NAME",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-3368-BK",
+      "page": 3,
+      "widget_leaf": "P3_N1B_FLD[0]",
+      "canonical_key": "person.ssn",
+      "source_cue": "1.B.  SOCIAL SECURITY NUMBER",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-3368-BK",
+      "page": 3,
+      "widget_leaf": "P3_N1DAddress_FLD[0]",
+      "canonical_key": "person.mailing.street",
+      "source_cue": "1.D.  MAILING ADDRESS",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-3368-BK",
+      "page": 3,
+      "widget_leaf": "P3_N1DZip_FLD[0]",
+      "canonical_key": "person.mailing.postal_code",
+      "source_cue": "ZIP/Postal Code",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-3368-BK",
+      "page": 3,
+      "widget_leaf": "P3_N1EEmail_FLD[0]",
+      "canonical_key": "person.email",
+      "source_cue": "1.E.  EMAIL ADDRESS",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-3368-BK",
+      "page": 3,
+      "widget_leaf": "P3_N1FPhonePrim_FLD[0]",
+      "canonical_key": "person.phone.primary",
+      "source_cue": "1.F.  DAYTIME PHONE NUMBER(S)",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-3369-BK",
+      "page": 3,
+      "widget_leaf": "P3-Sec1AName-FLD[0]",
+      "canonical_key": "person.name",
+      "source_cue": "A. NAME",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-3369-BK",
+      "page": 3,
+      "widget_leaf": "P3-Sec1BSSN-FLD[0]",
+      "canonical_key": "person.ssn",
+      "source_cue": "B. SOCIAL SECURITY NUMBER",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-3369-BK",
+      "page": 3,
+      "widget_leaf": "P3-Sec1CPrim-FLD[0]",
+      "canonical_key": "person.phone.primary",
+      "source_cue": "C.  DAYTIME PHONE NUMBER(S)",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-3373-BK",
+      "page": 3,
+      "widget_leaf": "Name_FLD[0]",
+      "canonical_key": "person.name",
+      "source_cue": "NAME OF DISABLED PERSON",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-3373-BK",
+      "page": 3,
+      "widget_leaf": "SSN_FLD[0]",
+      "canonical_key": "person.ssn",
+      "source_cue": "SOCIAL SECURITY NUMBER",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-3373-BK",
+      "page": 3,
+      "widget_leaf": "AreaCode_FLD[0]",
+      "canonical_key": "person.phone.area_code",
+      "source_cue": "Area Code",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-3373-BK",
+      "page": 3,
+      "widget_leaf": "Phone_FLD[0]",
+      "canonical_key": "person.phone.national_number",
+      "source_cue": "Phone Number",
+      "subject": "applicant",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-3373-BK",
+      "page": 10,
+      "widget_leaf": "Name_FLD[0]",
+      "canonical_key": "report.ssa3373.completer.name",
+      "source_cue": "Name of person completing this form",
+      "subject": "respondent",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-827",
+      "page": 1,
+      "widget_leaf": "P1_Name1_FLD[0]",
+      "canonical_key": "person.name",
+      "source_cue": "Whose Records to be Disclosed",
+      "subject": "records_subject",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-827",
+      "page": 1,
+      "widget_leaf": "P1_SSN1_FLD[0]",
+      "canonical_key": "person.ssn",
+      "source_cue": "Whose Records to be Disclosed",
+      "subject": "records_subject",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-827",
+      "page": 1,
+      "widget_leaf": "P1_DOB_FLD[0]",
+      "canonical_key": "person.dob",
+      "source_cue": "Birthday",
+      "subject": "records_subject",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    },
+    {
+      "form_id": "SSA-827",
+      "page": 1,
+      "widget_leaf": "P1_PhoneNum_FLD[0]",
+      "canonical_key": "authorization.ssa827.signer.phone",
+      "source_cue": "Phone Number (with area code)",
+      "subject": "signer",
+      "review_status": "UNREVIEWED_CANDIDATE"
+    }
+  ]
+}
