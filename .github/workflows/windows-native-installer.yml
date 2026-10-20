@@ -26,8 +26,10 @@ jobs:
       - name: Windows upload and persistence smoke test
         shell: pwsh
         run: |
-          & .\\target\\release\\soar-desk.exe --smoke-import
-          if ($LASTEXITCODE -ne 0) { throw "Native upload smoke test failed: $LASTEXITCODE" }
+          $binary = (Resolve-Path '.\\target\\release\\soar-desk.exe').Path
+          $process = Start-Process -FilePath $binary -ArgumentList '--smoke-import' -PassThru -Wait
+          Write-Host ("Native upload smoke test exit code: " + $process.ExitCode)
+          if ($process.ExitCode -ne 0) { throw "Native upload smoke test failed: $($process.ExitCode)" }
       - name: Acquire published llama.cpp Windows CPU engine
         shell: pwsh
         run: |
