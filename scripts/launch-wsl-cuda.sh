@@ -7,7 +7,7 @@ ROOT="${SOAR_DESK_ROOT:-$HOME/Projects/SOAR-Desk}"
 LLAMA="$HOME/Projects/llama.cpp"
 PORT=8080
 MODEL_REPO="Qwen/Qwen3-4B-GGUF:Q4_K_M"
-STATE="$HOME/.local/state/soar-desk"
+STATE="${SOAR_DESK_STATE_DIR:-$HOME/.local/state/soar-desk}"
 LOG="$STATE/llama-cuda.log"
 server_pid=""
 
