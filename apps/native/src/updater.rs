@@ -52,7 +52,7 @@ fn digest_hex(text: &str) -> Option<String> {
     Some(hex.to_ascii_lowercase())
 }
 
-fn trusted_asset_url(text: &str) -> Option<Url> {
+fn trusted_asset_url(text: &str, tag: &str) -> Option<Url> {
     let parsed = Url::parse(text).ok()?;
     if parsed.scheme() != "https"
         || parsed.host_str() != Some("github.com")
@@ -61,10 +61,7 @@ fn trusted_asset_url(text: &str) -> Option<Url> {
         || parsed.password().is_some()
         || parsed.query().is_some()
         || parsed.fragment().is_some()
-        || !parsed
-            .path()
-            .starts_with("/crenem/SOAR-Desk/releases/download/")
-        || !parsed.path().ends_with("/SOAR-Desk-Setup.exe")
+        || parsed.path() != format!("/crenem/SOAR-Desk/releases/download/{tag}/{INSTALLER_NAME}")
     {
         return None;
     }
@@ -122,7 +119,7 @@ fn choose_release(data: &Value, installed: &Version, allow_preview: bool) -> Res
             }
             let Some(url) = asset["browser_download_url"]
                 .as_str()
-                .and_then(trusted_asset_url)
+                .and_then(|u| trusted_asset_url(u, tag))
             else {
                 continue;
             };
@@ -268,14 +265,16 @@ pub fn stage(
 mod tests {
     use super::*;
     fn item(tag: &str, preview: bool, digest: &str, url: &str) -> Value {
+        let trusted = format!("https://github.com/crenem/SOAR-Desk/releases/download/{tag}/SOAR-Desk-Setup.exe");
+        let asset_url = if url == "TRUSTED" { trusted.as_str() } else { url };
         serde_json::json!({
             "draft": false, "prerelease": preview, "tag_name": tag,
             "assets": [{"name": "SOAR-Desk-Setup.exe", "state": "uploaded",
                 "size": 20000000, "digest": digest,
-                "browser_download_url": url }]
+                "browser_download_url": asset_url }]
         })
     }
-    const URL: &str = "https://github.com/crenem/SOAR-Desk/releases/download/v0.1.2-preview.1/SOAR-Desk-Setup.exe";
+    const URL: &str = "TRUSTED";
     const SHA: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     #[test]
     fn selects_newer_preview_with_valid_hash_only() {
