@@ -527,7 +527,7 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
         <summary><strong>{domain.title}</strong> — {pending?pending+" mapped groups to address":"Mapped groups captured"}</summary>
         {pending>0?<div className="review">
          {missing.map(q=><p className="hint" key={q.key}>{q.label}</p>)}
-         {remainingGroups.map(c=><p className="hint" key={c.key}>{c.label}</p>)}
+         {remainingGroups.map(c=><p className="hint" key={c.key}>{c.title}</p>)}
          <button type="button" className="secondary" onClick={()=>{setDomainId(domain.id);setView("unified");}}>Continue this interview section →</button>
         </div>:<p className="hint">All currently mapped groups in this section have responses; official-form coverage is not yet verified.</p>}
        </details>;
