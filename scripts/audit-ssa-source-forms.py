@@ -97,8 +97,13 @@ def form_technology(pdf):
     try:
         catalog = pdf.pdf_catalog()
         kind, val = pdf.xref_get_key(catalog, "AcroForm")
+        if kind == "dict":
+            # PyMuPDF may expose a PDF catalog's inline AcroForm dictionary,
+            # rather than an indirect reference. Inspect it conservatively.
+            return {"acroform": True, "xfa": "/XFA" in val}
         if kind != "xref":
-            return {"acroform": False, "xfa": False}
+            return {"acroform": bool(pdf.is_form_pdf), "xfa": False,
+                    "requires_manual_inspection": bool(pdf.is_form_pdf)}
         xref = int(val.split()[0])
         xfa_kind, _ = pdf.xref_get_key(xref, "XFA")
         return {"acroform": True, "xfa": xfa_kind not in ("null", "none")}
