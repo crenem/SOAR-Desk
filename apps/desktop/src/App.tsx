@@ -38,6 +38,12 @@ export default function App(){
 function AuthenticatedWorkspace({operator,onLock,linked,profileId,onLinked}:{operator:string;onLock:()=>void;linked:boolean;profileId:string|null;onLinked:(s:FederatedOperatorStatus)=>void}) {
   const [step, setStep] = useState(0);
   const [workspaceMode, setWorkspaceMode] = useState<"screening"|"documents"|"applications">("applications");
+  const [appStage,setAppStage]=useState<"interview"|"package">("interview");
+  const [stageJump,setStageJump]=useState<{view:"unified"|"package";token:number}|null>(null);
+  function openApplicationStage(view:"unified"|"package"){
+    setWorkspaceMode("applications");setAppStage(view==="package"?"package":"interview");
+    setStageJump(old=>({view,token:(old?.token??0)+1}));
+  }
   const [caseReference,setCaseReference]=useState("SYN-APPLICATION-001");
   const [syntheticOnly,setSyntheticOnly]=useState(true);
   const [prefill,setPrefill]=useState<{caseReference:string;items:PrefillSuggestion[]}|null>(null);
@@ -90,12 +96,13 @@ function AuthenticatedWorkspace({operator,onLock,linked,profileId,onLinked}:{ope
       </div>
       <div className="sidebar-header">REFERRAL WORKSPACE</div>
       <div className="workspace-nav" role="group" aria-label="Workspace">
-      <button type="button" className={workspaceMode==="applications"?"selected":""} onClick={()=>setWorkspaceMode("applications")}>Application preparation</button>
-      <button type="button" className={workspaceMode==="documents"?"selected":""} onClick={()=>setWorkspaceMode("documents")}>Document evidence</button>
+      <button type="button" className={workspaceMode==="applications"&&appStage==="interview"?"selected":""} onClick={()=>openApplicationStage("unified")}>1 · Unified interview</button>
+      <button type="button" className={workspaceMode==="documents"?"selected":""} onClick={()=>setWorkspaceMode("documents")}>2 · Document evidence</button>
+      <button type="button" className={workspaceMode==="applications"&&appStage==="package"?"selected":""} onClick={()=>openApplicationStage("package")}>3 · Assemble package</button>
       <button type="button" className={workspaceMode==="screening"?"selected":""} onClick={()=>setWorkspaceMode("screening")}>Screening (optional)</button>
       </div>
       {workspaceMode==="applications"&&<ProgressNav forms={formTree} onJump={target=>{
-        setJump(old=>({target,token:(old?.token??0)+1}));setWorkspaceMode("applications");
+        setJump(old=>({target,token:(old?.token??0)+1}));setWorkspaceMode("applications");setAppStage("interview");
       }}/>}
       {workspaceMode==="screening"&&<ol className="steps">{steps.map((label,index) => <li key={label}><button className={index === step ? "active" : ""} aria-current={step === index ? "step" : undefined} onClick={() => {setStep(index);setError("");}}><span className="stepnumber">{index + 1}</span>{label}</button></li>)}</ol>}
       <div className="side-note"><strong>Restricted development build</strong><p>Encrypted local cases require independent nonprofit authorization and security review. Official SSA form/signing workflows remain incomplete.</p></div>
@@ -109,11 +116,12 @@ function AuthenticatedWorkspace({operator,onLock,linked,profileId,onLinked}:{ope
         onPrefillApplied={()=>setPrefill(null)}
         onProgress={setFormTree}
         navigate={jump}
+        stageJump={stageJump}
         inboundEvidence={inboundEvidence}
         onEvidenceReceived={()=>setInboundEvidence(null)}
       /></div>
       <div className="content" hidden={workspaceMode!=="documents"}><Documents caseReference={caseReference} syntheticOnly={syntheticOnly} onPrefill={(items,forCase)=>{
-        setPrefill({caseReference:forCase,items});setWorkspaceMode("applications");
+        setPrefill({caseReference:forCase,items});openApplicationStage("unified");
       }} onEvidenceAttached={(source,forCase,documentReview)=>{
         setInboundEvidence(old=>({source,caseReference:forCase,documentReview,sequence:(old?.sequence??0)+1}));
         setWorkspaceMode("applications");

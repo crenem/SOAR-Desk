@@ -261,6 +261,58 @@ fn extract_qwen_candidates(request: QwenRequest) -> Result<serde_json::Value, St
     Ok(parsed)
 }
 
+
+#[derive(Deserialize)]
+struct WholeDocumentRequest {
+    sha256: String,
+    pages: Vec<soar_documents::PageText>,
+    synthetic_confirmed: bool,
+    #[serde(default)]
+    local_risk_acknowledged: bool,
+}
+
+/// Qwen-only, offline document-wide JSON extraction. Larger OCR sources are
+/// windowed by the Python worker, and return ONE combined page-sourced object.
+#[tauri::command]
+fn extract_qwen_document(request: WholeDocumentRequest) -> Result<serde_json::Value, String> {
+    operator_auth::require_operator()?;
+    local_case_review_ack(request.synthetic_confirmed, request.local_risk_acknowledged)?;
+    if !request.sha256.bytes().all(|b| b.is_ascii_hexdigit()) || request.sha256.len() != 64 {
+        return Err("Invalid document SHA-256".into());
+    }
+    if request.pages.is_empty() || request.pages.len() > 25 {
+        return Err("Expected 1–25 extracted pages".into());
+    }
+    let total_chars: usize = request.pages.iter().map(|p| p.text.len()).sum();
+    if total_chars > 300_000 { return Err("Extracted text exceeds local document limit".into()); }
+    use std::{io::Write, process::{Command, Stdio}};
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let worker = root.join("workers/qwen_document_worker.py");
+    let venv = root.join(".venv-laya/bin/python");
+    let python = if venv.exists() { venv.to_string_lossy().to_string() } else { "python3".into() };
+    let mut child = Command::new(python).arg(worker)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .spawn().map_err(|e| format!("Local Qwen document worker unavailable: {e}"))?;
+    // Do not send filesystem paths, user passwords, case IDs or storage keys to
+    // the inference server. Only the extracted pages and their digest.
+    let payload = serde_json::json!({"sha256":request.sha256,"pages":request.pages});
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(payload.to_string().as_bytes()).map_err(|e| e.to_string())?;
+    }
+    let output = child.wait_with_output().map_err(|e| e.to_string())?;
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|e| format!("Qwen document worker returned invalid JSON: {e}"))?;
+    if !output.status.success() {
+        return Err(parsed.get("error").and_then(|v|v.as_str()).unwrap_or("Document analysis failed").to_string());
+    }
+    if parsed.get("proposed_only").and_then(|v|v.as_bool()) != Some(true)
+        || parsed.get("document_sha256").and_then(|v|v.as_str()) != Some(payload["sha256"].as_str().unwrap_or(""))
+    {
+        return Err("Document worker result failed provenance validation".into());
+    }
+    Ok(parsed)
+}
+
 /// Explicit, bounded export of a synthetic-only application draft.
 #[derive(Deserialize)]
 struct SyntheticDraftRequest {
@@ -456,7 +508,7 @@ fn render_ssa16_review_pdf(request: SyntheticPdfRequest,training:bool) -> Result
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![operator_auth::operator_status, operator_auth::enroll_operator, operator_auth::login_operator, operator_auth::logout_operator, zitadel_oidc::zitadel_settings, zitadel_oidc::configure_zitadel, zitadel_oidc::begin_zitadel_auth, zitadel_oidc::zitadel_auth_progress, zitadel_oidc::complete_zitadel_auth, evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text, extract_qwen_candidates, export_synthetic_draft, export_synthetic_ssa16_pdf, export_local_ssa16_working_pdf, vault_commands::create_synthetic_vault, vault_commands::open_synthetic_vault, vault_commands::backup_synthetic_vault, vault_commands::recover_synthetic_vault, vault_commands::autosave_synthetic_case, vault_commands::synthetic_autosave_status, vault_commands::lock_synthetic_autosave, vault_commands::attach_evidence_document, vault_commands::verify_attached_evidence, vault_commands::list_case_evidence, vault_commands::export_evidence_document, ssa_template_commands::ssa16_template_status, ssa_template_commands::install_ssa16_template])
+        .invoke_handler(tauri::generate_handler![operator_auth::operator_status, operator_auth::enroll_operator, operator_auth::login_operator, operator_auth::logout_operator, zitadel_oidc::zitadel_settings, zitadel_oidc::configure_zitadel, zitadel_oidc::begin_zitadel_auth, zitadel_oidc::zitadel_auth_progress, zitadel_oidc::complete_zitadel_auth, evaluate_screen, validate_human_review, extract_synthetic_document, classify_synthetic_text, extract_qwen_candidates, extract_qwen_document, export_synthetic_draft, export_synthetic_ssa16_pdf, export_local_ssa16_working_pdf, vault_commands::create_synthetic_vault, vault_commands::open_synthetic_vault, vault_commands::backup_synthetic_vault, vault_commands::recover_synthetic_vault, vault_commands::autosave_synthetic_case, vault_commands::synthetic_autosave_status, vault_commands::lock_synthetic_autosave, vault_commands::attach_evidence_document, vault_commands::verify_attached_evidence, vault_commands::list_case_evidence, vault_commands::export_evidence_document, ssa_template_commands::ssa16_template_status, ssa_template_commands::install_ssa16_template])
         .run(tauri::generate_context!())
         .expect("error starting SOAR Desk");
 }

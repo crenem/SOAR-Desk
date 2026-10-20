@@ -13,6 +13,7 @@ import type {PrefillSuggestion} from "./document-prefill";
 import type {AttachedSource} from "./evidence-attachment";
 import {kindFor,inputMask,normalizeOnBlur,validateDisplay} from "./field-format";
 import {formCoverage,type FormCoverage,type MissingTarget} from "./form-navigation";
+import {buildUnifiedInterview,unifiedProgress} from "./unified-interview";
 import type {EvidenceReference,PackageInput,SyntheticRecoveryEvent,DocumentReviewRecord} from "./application-package";
 
 const emptyAnswer=():Response=>({value:"",status:"reported",source:""});
@@ -24,15 +25,19 @@ const statuses:{value:AnswerStatus;label:string}[]=[
 ];
 const display=(s:Response|undefined)=>s?.status==="unknown"?"Unknown":s?.value || "Not collected";
 const fieldsOf=(rows:Rows,key:string)=>rows[key]??[];
-type View="overview"|"interview"|"review"|"evidence"|"package"|"submissions"|"casefiles"|"signatures";
-type Props={onCaseChange?:(ref:string)=>void;onCaseModeChange?:(syntheticOnly:boolean)=>void;prefill?:PrefillSuggestion[];onPrefillApplied?:()=>void;onProgress?:(items:FormCoverage[])=>void;navigate?:{target:MissingTarget;token:number}|null;inboundEvidence?:{source:AttachedSource;caseReference:string;sequence:number;documentReview?:DocumentReviewRecord}|null;onEvidenceReceived?:()=>void};
+type View="unified"|"overview"|"interview"|"review"|"evidence"|"package"|"submissions"|"casefiles"|"signatures";
+type Props={onCaseChange?:(ref:string)=>void;onCaseModeChange?:(syntheticOnly:boolean)=>void;prefill?:PrefillSuggestion[];onPrefillApplied?:()=>void;onProgress?:(items:FormCoverage[])=>void;navigate?:{target:MissingTarget;token:number}|null;stageJump?:{view:"unified"|"package";token:number}|null;inboundEvidence?:{source:AttachedSource;caseReference:string;sequence:number;documentReview?:DocumentReviewRecord}|null;onEvidenceReceived?:()=>void};
 
 
-export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,prefill=[],onPrefillApplied,onProgress,navigate,inboundEvidence,onEvidenceReceived}:Props){
+export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,prefill=[],onPrefillApplied,onProgress,navigate,stageJump,inboundEvidence,onEvidenceReceived}:Props){
  const [programs,setPrograms]=useState<Program[]>(["ssi","ssdi"]);
+
  const [formId,setFormId]=useState<FormId>("SSA-3368-BK");
  const [section,setSection]=useState("identity");
- const [view,setView]=useState<View>("overview");
+ const [view,setView]=useState<View>("unified");
+ // Sidebar stage switch stays independent of per-form missing-field navigation.
+ useEffect(()=>{if(stageJump?.token)setView(stageJump.view);},[stageJump?.token]);
+ const [domainId,setDomainId]=useState("person");
  const [answers,setAnswers]=useState<Answers>({});
  const [rows,setRows]=useState<Rows>({});
  const [includeDeferred,setIncludeDeferred]=useState(false);
@@ -186,15 +191,14 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
      const next={...old};
      for(const item of prefill){
        if(prefillSelected[item.key]&&!old[item.key]?.value){
-         next[item.key]={value:item.value,status:"reported",source:item.source};
+         next[item.key]={value:item.value,status:"clarify",source:item.source};
        }
      }
      return next;
    });
    onPrefillApplied?.();
-   setView("interview");
-   setFormId("SSA-3368-BK");
-   setSection("identity");
+   setView("unified");
+   setDomainId("person");
  }
  function openCaseFiles(mode:"create"|"open"){
    setVaultMode(mode);
@@ -202,6 +206,9 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
  }
 
  const activeForms=useMemo(()=>FORMS.filter(f=>f.programs.some(p=>programs.includes(p))&&(f.id!=="SSA-8001-BK"||includeDeferred)),[programs,includeDeferred]);
+ const unifiedIndex=useMemo(()=>buildUnifiedInterview(activeForms),[activeForms]);
+ const unifiedStats=useMemo(()=>unifiedProgress(unifiedIndex,answers,rows),[unifiedIndex,answers,rows]);
+ const activeDomain=unifiedIndex.domains.find(d=>d.id===domainId)??unifiedIndex.domains[0];
  const current=FORM_BY_ID[formId];
  const validCurrent=activeForms.some(f=>f.id===formId)?current:activeForms[0];
  const activeSection=validCurrent?.sections.find(s=>s.id===section)??validCurrent?.sections[0];
@@ -244,7 +251,7 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
   setActiveVault(null);lastSaved.current="";
   void invoke("lock_synthetic_autosave").catch(()=>{});
   setAutosaveState("Restricted local case created in memory. Create an encrypted vault BEFORE entering records.");
-  setFormId("SSA-3368-BK");setSection("identity");setVaultMode("create");setView("casefiles");
+  setFormId("SSA-3368-BK");setSection("identity");setDomainId("person");setVaultMode("create");setView("casefiles");
  }
  function loadSyntheticExample(){
   if(!canReplaceCase())return;
@@ -279,7 +286,7 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
     medicines:[{medicine:"Fictional medication — confirm with record",reason:"Pain management",_status:"reported"}]
   });
   setSyntheticOnly(true);
-  setFormId("SSA-3368-BK");setSection("identity");setView("interview");setCaseLabel("SYN-JANE-DOE-001");
+  setFormId("SSA-3368-BK");setSection("identity");setDomainId("person");setView("unified");setCaseLabel("SYN-JANE-DOE-001");
  }
  function restoreSyntheticCase(saved:PackageInput){
   // The vault import interface explicitly asks for confirmation before calling.
@@ -295,7 +302,7 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
   setSubmissionLog({records:[...saved.submissions.records],events:[...saved.submissions.events]});
   setFormId("SSA-3368-BK");
   setSection("identity");
-  setView("overview");
+  setDomainId("person");setView("unified");
  }
  function chooseProgram(p:Program){
    const next=programs.includes(p)?programs.filter(x=>x!==p):[...programs,p];
@@ -436,8 +443,39 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
      {!syntheticOnly&&<p className="field-warning">Local case beta: store only in an encrypted vault. This build has no SQLCipher, authenticated staff roles, independently anchored audit, or encrypted source-document storage. Do not treat this as an SSA filing system or a certified medical-record system.</p>}
    </div>
    <div className="intake-tabs" role="group" aria-label="Application views">
-    {(["overview","interview","review","evidence","signatures","package","submissions","casefiles"] as View[]).map(v=><button type="button" key={v} className={view===v?"active":""} onClick={()=>setView(v)}>{v==="overview"?"Form inventory":v==="interview"?"Guided interview":v==="review"?"Review gaps":v==="evidence"?"Evidence register":v==="signatures"?"Acknowledgments":v==="package"?"SSA exports":v==="casefiles"?"Case files":"Submissions & receipts"}</button>)}
+    {(["unified","review","evidence","package","overview","interview","signatures","submissions","casefiles"] as View[]).map(v=><button type="button" key={v} className={view===v?"active":""} onClick={()=>setView(v)}>{v==="unified"?"1 · Unified interview":v==="overview"?"Form inventory":v==="interview"?"Form-specific crosswalk":v==="review"?"Review gaps":v==="evidence"?"Evidence register":v==="signatures"?"Acknowledgments":v==="package"?"3 · Package":v==="casefiles"?"Case files":"Submissions & receipts"}</button>)}
    </div>
+   {view==="unified"&&<section className="panel">
+    <div className="eyebrow">STEP 1 · ENTER ONCE, REUSE ACROSS SSA FORMS</div>
+    <h2>Unified applicant interview</h2>
+    <p className="intro">These interview questions are generated from the <strong>currently mapped</strong> SSA forms. Each canonical answer is asked once even when multiple forms use it. Form references remain visible. This is not yet a complete audit of every question in every official SSA edition.</p>
+    <div className="submit-summary">
+     <div><strong>{unifiedStats.answered} / {unifiedStats.possible}</strong><span>Mapped answer groups captured</span></div>
+     <div><strong>{unifiedIndex.repeatedQuestionOccurrences+unifiedIndex.repeatedCollectionOccurrences}</strong><span>Repeated entries avoided</span></div>
+     <div><strong>{unifiedStats.remaining}</strong><span>Mapped answer groups remaining</span></div>
+    </div>
+    {unifiedIndex.mappingConflicts.length>0&&<div className="field-warning" role="alert">
+      <strong>Crosswalk conflicts requiring SSA form audit:</strong> {unifiedIndex.mappingConflicts.join(" · ")}
+    </div>}
+    <div className="intake-sections" role="group" aria-label="Unified interview domains">
+      {unifiedIndex.domains.map(d=><button type="button" key={d.id}
+       className={d.id===activeDomain?.id?"active":""} onClick={()=>setDomainId(d.id)}>{d.title}</button>)}
+    </div>
+    {activeDomain&&<>
+      <h3>{activeDomain.title}</h3>
+      {activeDomain.questions.map(q=>renderQuestion({...q,ref:q.references.join(" · ")}))}
+      {activeDomain.collections.map(c=>renderCollection({...c,ref:c.references.join(" · ")}))}
+      <div className="actions">
+       <button className="secondary" type="button" disabled={unifiedIndex.domains.indexOf(activeDomain)===0}
+         onClick={()=>setDomainId(unifiedIndex.domains[unifiedIndex.domains.indexOf(activeDomain)-1].id)}>Previous domain</button>
+       <div className="spacer"/>
+       <button className="primary" type="button" onClick={()=>{
+         const next=unifiedIndex.domains[unifiedIndex.domains.indexOf(activeDomain)+1];
+         if(next)setDomainId(next.id);else setView("review");
+       }}>{unifiedIndex.domains.indexOf(activeDomain)<unifiedIndex.domains.length-1?"Next domain →":"Review interview gaps →"}</button>
+      </div>
+    </>}
+   </section>}
    {view==="overview"&&<section className="panel">
     <h2>Selected application forms</h2>
     <p className="muted">Only starter-level questions are currently mapped. Progress below is information collected, <strong>not form completeness or submission readiness</strong>.</p>

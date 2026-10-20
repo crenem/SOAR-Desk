@@ -1,272 +1,253 @@
-import { useEffect,useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
-import { extractMetadata, type MetadataCandidate, type MetadataCategory } from "./metadata";
-import { reviewedSuggestions,type PrefillSuggestion } from "./document-prefill";
+import {useEffect,useRef,useState} from "react";
+import {invoke} from "@tauri-apps/api/core";
+import {open} from "@tauri-apps/plugin-dialog";
+import {extractMetadata,type MetadataCandidate,type MetadataCategory} from "./metadata";
+import {reviewedSuggestions,type PrefillSuggestion} from "./document-prefill";
+import {kindFor,normalizeOnBlur,validateDisplay} from "./field-format";
 import type {AttachedSource} from "./evidence-attachment";
 import type {DocumentReviewRecord} from "./application-package";
 import {analysisMode} from "./document-intake-policy";
 
-type Page = { page: number; text: string; method: string; warning: string | null };
-type Document = { document_id: string; sha256: string; pages: Page[] };
-type ModelAnswer = { choice?: string; answer_confidence?: number; probabilities?: Record<string,number>; confidence?: number; noul?: number };
-type LayaResult = { model: string; truncated?: boolean; document_type?: { answer?: ModelAnswer; mode?: string; model?: string; usage?: { truncated?: boolean; state_tokens_dropped?: number } }; functional_evidence?: { answer?: ModelAnswer; mode?: string; model?: string; usage?: { truncated?: boolean; state_tokens_dropped?: number } } };
-type Segment = { page: number; index: number; text: string; result?: LayaResult; error?: string };
-type QwenFinding = {category:string; value:string; quote:string; review_status:string};
-type QwenResult = {model:string; backend?:"npu"|"cpu"; summary:string; findings:QwenFinding[]; proposed_only:boolean};
-type QwenSegment = {page:number; index:number; data?:QwenResult; error?:string};
-type Review = "PendingHumanReview" | "HumanVerified" | "Rejected" | "NeedsMoreEvidence";
-const MAX_SEGMENT = 1100;
-const TYPE_LABELS: Record<string,string> = {
-  clinical_note: "Clinical note", hospital_summary: "Hospital encounter / discharge summary",
-  work_history: "Employment or work-history record", other: "Other / undetermined"
+type Page={page:number;text:string;method:string;warning:string|null};
+type Document={document_id:string;sha256:string;pages:Page[]};
+type Finding={category:string;value:string;quote:string;page:number;source_start:number;review_status:"PendingHumanReview"};
+type FieldProposal={key:string;label:string;value:string;quote:string;page:number;source_start:number;review_status:"PendingHumanReview"};
+type WholeDocument={
+ schema_version:number;document_sha256:string;model:string;backend:string;summary:string;
+ findings:Finding[];field_suggestions:FieldProposal[];
+ processed_windows:number;total_windows:number;unreadable_pages:number[];
+ failed_windows:{page:number;window:number;message:string}[];
+ analysis_complete:boolean;warnings:string[];proposed_only:true;
 };
-function splitPage(page: Page): Segment[] {
-  const paragraphs = page.text.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
-  const parts: string[] = [];
-  let current = "";
-  for (const p of paragraphs) {
-    let remaining = p;
-    while (remaining.length > 0) {
-      const room = MAX_SEGMENT - current.length - (current ? 2 : 0);
-      if (room < 100) { parts.push(current); current = ""; continue; }
-      if (remaining.length <= room) { current += (current ? "\n\n" : "") + remaining; break; }
-      let cut = remaining.lastIndexOf(" ", room);
-      if (cut < Math.floor(room / 2)) cut = room;
-      current += (current ? "\n\n" : "") + remaining.slice(0,cut).trim();
-      parts.push(current); current = "";
-      remaining = remaining.slice(cut).trimStart();
-    }
-  }
-  if (current) parts.push(current);
-  return parts.map((text,index) => ({page:page.page,index:index+1,text}));
+type Review="PendingHumanReview"|"HumanVerified"|"Rejected"|"NeedsMoreEvidence";
+const metadataCategories:MetadataCategory[]=["Document","Patient","Encounter","Diagnoses","Medical history","Psychiatric history","Medications","Allergies","Functional evidence"];
+const narrativeTargets=[
+ {key:"medical.remarks",label:"Medical evidence remarks"},
+ {key:"function.work",label:"Evidence relevant to ability to work"},
+ {key:"function.abilities",label:"Functional abilities and limitations"},
+ {key:"work.explain",label:"Work demands and limitations"},
+ {key:"function.remarks",label:"Function report remarks"},
+];
+const proposalId=(item:{page:number;source_start:number;quote:string},index:number)=>`${item.page}:${item.source_start}:${index}`;
+function verifiedQwenPrefills(items:FieldProposal[],checked:Record<string,boolean>,sha:string):PrefillSuggestion[]{
+ const proposals:PrefillSuggestion[]=[];
+ const conflicts=new Set<string>();
+ const values=new Map<string,string>();
+ for(let index=0;index<items.length;index++){
+  const item=items[index];
+  if(!checked[proposalId(item,index)])continue;
+  const kind=kindFor(item.key,item.key==="person.dob"?"date":"text");
+  const value=normalizeOnBlur(kind,item.value);
+  if(validateDisplay(kind,value))continue;
+  if(values.has(item.key)&&values.get(item.key)!==value){conflicts.add(item.key);continue;}
+  values.set(item.key,value);
+  proposals.push({key:item.key,label:item.label,value,
+   page:item.page,documentSha256:sha,excerpt:item.quote,
+   source:`Document SHA-256 ${sha} · page ${item.page} · Qwen proposal verified against original by practitioner`});
+ }
+ return proposals.filter(item=>!conflicts.has(item.key)).filter((item,index,self)=>self.findIndex(q=>q.key===item.key)===index);
 }
-function confidence(answer?: ModelAnswer): number | undefined {
-  return typeof answer?.answer_confidence === "number" ? answer.answer_confidence : undefined;
-}
-function summarise(parts: Segment[]) {
-  const complete = parts.filter(p => p.result && !p.result.truncated &&
-    !p.result.document_type?.usage?.truncated && !p.result.functional_evidence?.usage?.truncated &&
-    !p.result.document_type?.usage?.state_tokens_dropped && !p.result.functional_evidence?.usage?.state_tokens_dropped);
-  const votes = new Map<string, number>();
-  for (const segment of complete) {
-    const answer = segment.result?.document_type?.answer;
-    if (answer?.choice && confidence(answer) !== undefined && confidence(answer)! >= 0.55) {
-      votes.set(answer.choice,(votes.get(answer.choice) ?? 0) + confidence(answer)!);
-    }
-  }
-  const ordered = [...votes.entries()].sort((a,b)=>b[1]-a[1]);
-  const category = ordered[0] && (ordered.length === 1 || ordered[0][1] >= ordered[1][1]*1.5) ?
-    TYPE_LABELS[ordered[0][0]] ?? "Other / undetermined" : "Uncertain — human classification required";
-  const scored = complete.filter(p => typeof p.result?.functional_evidence?.answer?.noul === "number");
-  return {category, processed:complete.length, total:parts.length, failed:parts.length-complete.length,
-    functional:scored.length ? "Functional-evidence signals available for review; verify each against source passages." : "No reliable functional-evidence classification available.",
-    status: parts.length && complete.length === parts.length && ordered.length > 0 ? "Ready for human review" : "Incomplete — review required"};
-}
-export default function Documents({caseReference,syntheticOnly,onPrefill,onEvidenceAttached}:{caseReference:string;syntheticOnly:boolean;onPrefill:(items:PrefillSuggestion[],caseReference:string)=>void;onEvidenceAttached:(source:AttachedSource,caseReference:string,review?:DocumentReviewRecord)=>void}) {
-  const [confirmed,setConfirmed] = useState(false);
-  const [path,setPath] = useState("");
-  const [documentCase,setDocumentCase]=useState("");
-  const [document,setDocument] = useState<Document | null>(null);
-  const [segments,setSegments] = useState<Segment[]>([]);
-  const [metadata,setMetadata] = useState<MetadataCandidate[]>([]);
-  const [qwen,setQwen] = useState<QwenSegment[]>([]);
-  const [progress,setProgress] = useState("");
-  const [busy,setBusy] = useState(false);
-  const [error,setError] = useState("");
-  const [review,setReview] = useState<Review>("PendingHumanReview");
-  const [reviewer,setReviewer] = useState("");
-  const [rationale,setRationale] = useState("");
-  const generation = useRef(0);
-  useEffect(()=>{
-    // Do not leave old source-document plaintext or review state visible after
-    // changing to another case. Cancel outstanding inference sequences.
-    generation.current++;
-    setDocument(null);setSegments([]);setMetadata([]);setQwen([]);
-    setPath("");setDocumentCase("");setConfirmed(false);setProgress("");
-    setError("");setReview("PendingHumanReview");setReviewer("");setRationale("");
-    setBusy(false);
-  },[caseReference,syntheticOnly]);
 
-  async function ingest(filePath:string) {
-    const run = ++generation.current;
-    setPath(filePath);setDocumentCase(caseReference);setDocument(null);setSegments([]);setMetadata([]);setQwen([]);setError("");setReview("PendingHumanReview");setReviewer("");setRationale("");
-    setBusy(true);setProgress("Extracting document text and performing OCR…");
-    try {
-      const doc = await invoke<Document>("extract_synthetic_document",{request:{path:filePath,...analysisMode(syntheticOnly)}});
-      if (generation.current !== run) return;
-      setDocument(doc);
-      setMetadata(extractMetadata(doc.pages));
-      const chunks = doc.pages.flatMap(splitPage);
-      setSegments(chunks);
-      if (!chunks.length) {setError("No readable text was found. Verify the original scan and OCR installation.");return;}
-      // Inference is sequential to avoid loading multiple heavyweight ARM64 model processes.
-      const output:Segment[] = [...chunks];
-      for (let i=0;i<chunks.length;i++) {
-        if (generation.current !== run) return;
-        setProgress(`Classifying passage ${i+1} of ${chunks.length} (page ${chunks[i].page})…`);
-        try {
-          const result=await invoke<LayaResult>("classify_synthetic_text",{request:{text:chunks[i].text,...analysisMode(syntheticOnly)}});
-          output[i]={...chunks[i],result};
-        } catch(e) {output[i]={...chunks[i],error:String(e)};}
-        if (generation.current === run) setSegments([...output]);
-      }
-      setProgress("Laya complete. Extracting proposed clinical findings with Qwen3 4B…");
-      const extracted: QwenSegment[] = [];
-      for (let i=0;i<chunks.length;i++) {
-        if (generation.current !== run) return;
-        setProgress(`Qwen3 4B: passage ${i+1} of ${chunks.length} (page ${chunks[i].page})…`);
-        try {
-          const data=await invoke<QwenResult>("extract_qwen_candidates",{request:{text:chunks[i].text,...analysisMode(syntheticOnly)}});
-          extracted.push({page:chunks[i].page,index:chunks[i].index,data});
-        } catch(e) {
-          extracted.push({page:chunks[i].page,index:chunks[i].index,error:String(e)});
-          // Do not repeatedly call an unavailable model server for every passage.
-          if (String(e).includes("not available on 127.0.0.1:8080")) {
-            setQwen([...extracted]);break;
-          }
-        }
-        if (generation.current===run)setQwen([...extracted]);
-      }
-      setProgress("Document assessment ready. All model-generated findings require human review.");
-    } catch(e) {if (generation.current === run) setError(String(e));}
-    finally {if (generation.current === run) setBusy(false);}
-  }
-  async function attachAnalyzedDocument(){
-    if(!document||!path||documentCase!==caseReference||busy)return;
-    setError("");setBusy(true);
-    try{
-      const attached=await invoke<AttachedSource>("attach_evidence_document",{request:{
-        source_path:path,case_reference:caseReference,expected_sha256:document.sha256,
-        ...analysisMode(syntheticOnly)
-      }});
-      const humanReview:DocumentReviewRecord|undefined=
-        review!=="PendingHumanReview" && reviewer.trim().length>=3 && rationale.trim().length>=12
-        ? {outcome:review,reviewerId:reviewer.trim(),rationale:rationale.trim(),
-           recordedAt:new Date().toISOString(),documentSha256:document.sha256}
-        : undefined;
-      onEvidenceAttached(attached,caseReference,humanReview);
-    }catch(e){setError("Encrypted attachment could not be created: "+String(e));}
-    finally{setBusy(false);}
-  }
-  async function browse() {
-    if (!confirmed || busy) return;
-    setError("");
-    try {
-      const selected=await open({multiple:false,directory:false,title:syntheticOnly?"Select a fictional evidence document":"Select a locally authorized evidence document",
-        filters:[{name:"PDF and images",extensions:["pdf","png","jpg","jpeg","tif","tiff"]}]});
-      if (typeof selected === "string") await ingest(selected);
-    } catch(e) {setError("Unable to select document: "+String(e));}
-  }
-  const summary=summarise(segments);
-  const inferenceBackends=[...new Set(qwen.map(item=>item.data?.backend).filter(Boolean))];
-  const qwenFindings=qwen.flatMap(s=>(s.data?.findings??[]).map(f=>({...f,page:s.page,segment:s.index})));
-  const qwenFailures=qwen.filter(s=>s.error).length;
-  const metadataGroups: MetadataCategory[] = ["Document","Patient","Encounter","Diagnoses","Medical history","Psychiatric history","Medications","Allergies","Functional evidence"];
-  const verifiedMetadata = metadata.filter(m=>m.status==="HumanVerified").length;
-  const fillCandidates = document && documentCase===caseReference ? reviewedSuggestions(metadata,document.sha256,documentCase) : [];
-  function updateMetadata(id:string, patch:Partial<MetadataCandidate>){setMetadata(items=>items.map(m=>m.id===id?{...m,...patch,status:patch.value!==undefined?"PendingHumanReview":(patch.status??m.status)}:m)); setReview("PendingHumanReview");}
-  const readyToReview=!busy && !!document && segments.length>0 && review!=="PendingHumanReview" && reviewer.trim().length>=3 && rationale.trim().length>=12;
-  return <section className="panel" aria-label="Document intake and evidence assessment">
-    <div className="eyebrow">{syntheticOnly?"DOCUMENT PROCESSING · SYNTHETIC TEST DATA ONLY":"RESTRICTED LOCAL DOCUMENT ANALYSIS · NOT DEPLOYMENT-APPROVED"}</div>
-    <h1>Document intake and evidence review</h1>
-    <p className="intro">Select {syntheticOnly?"a fictional":"an organization-authorized local"} document. Text extraction, OCR, classification and source-grounded proposals run on this computer. Results are not disability determinations. Original documents are encrypted into the case only when you choose Attach original; extracted text and model-generated findings remain session-only. A completed human document-level review can be saved with an attached original.</p>
-    <label className="checkline"><input type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/>{syntheticOnly?"I confirm the selected document contains only fictional test information.":"I am authorized by the nonprofit to process this document locally. I understand this development version has not completed a PHI/security review; its inference server receives content over local loopback and extracted text is held in application memory."}</label>
-    <button type="button" className="primary" disabled={!confirmed||busy} onClick={browse}>Browse and analyze document…</button>
-    {path && <p className="muted" style={{overflowWrap:"anywhere"}}><strong>Selected file:</strong> {path}</p>}
-    {progress && <p role="status" aria-live="polite">{progress}</p>}
-    {busy && <progress aria-label="Document processing in progress" />}
-    {error && <div className="error" role="alert"><strong>Document processing issue</strong><p>{error}</p></div>}
-    {document && <>
-      <section className="review">
-        <h2>Document-wide proposed assessment</h2>
-        <p className="muted">Document {document.document_id} · {document.pages.length} pages · {segments.length} passages</p>
-        <div className="case-document-actions">
-          <button type="button" className="primary" disabled={busy||documentCase!==caseReference}
-             onClick={()=>void attachAnalyzedDocument()}>Attach original securely to this case →</button>
-          <p className="hint">Requires a writable unlocked case vault. The native backend encrypts the original and checks that its SHA-256 still matches this analyzed document. This action does not mark clinical interpretations verified.</p>
-        </div>
-        <p><strong>Likely document type:</strong> {summary.category}</p>
-        <p><strong>Processing:</strong> {summary.processed} of {summary.total} passages classified; {summary.failed} incomplete or failed.</p>
-        <p><strong>Functional evidence:</strong> {summary.functional}</p>
-        <p><strong>Review readiness:</strong> {busy ? "Processing" : summary.status}</p>
-        <p className="muted">This assessment combines passage classifications, not clinical findings. It cannot establish disability, severity, duration, or eligibility. Uncertainty and conflicting classifications require human examination.</p>
-      </section>
-      <section className="review">
-        <h2>Qwen3 4B · Proposed clinical evidence summary</h2>
-        <p className="muted">Locally generated, unverified and source-linked. The model must not decide SSI/SSDI eligibility. A quotation match is a basic safeguard, not proof the interpretation is accurate.</p>
-        <p><strong>Inference backend:</strong> {inferenceBackends.length ? inferenceBackends.map(b=>b==="npu"?"Windows GenieX (NPU-capable)":"Ubuntu llama.cpp (local; CUDA if enabled)").join(", ") : (busy ? "Waiting for Qwen…" : "Not available")}</p>
-        <p><strong>{qwenFindings.length}</strong> proposed clinical findings · <strong>{qwenFailures}</strong> inference errors.</p>
-        {qwen.filter(s=>s.error).map(s=><p key={`${s.page}-${s.index}`} role="alert" className="error">Page {s.page}, passage {s.index}: {s.error}</p>)}
-        {qwen.length===0 && <p>{busy ? "Waiting for the Laya stage to complete…" : "Qwen results not available. Start the local llama.cpp server; see docs/QWEN-LOCAL.md."}</p>}
-        {qwenFindings.length===0 && qwen.length>0 && <p>No verifiable quoted findings returned. Inspect the original document; do not infer that no clinical evidence exists.</p>}
-        {Array.from(new Set(qwenFindings.map(f=>f.category))).map(category=><details key={category} open={category==="diagnosis"||category==="functional_limitation"}>
-          <summary><strong>{category.replace(/_/g," ")}</strong> ({qwenFindings.filter(f=>f.category===category).length})</summary>
-          {qwenFindings.filter(f=>f.category===category).map((f,i)=><div className="question" key={`${f.page}-${f.segment}-${i}`}>
-            <p><strong>Page {f.page}, passage {f.segment}:</strong> {f.value}</p>
-            <blockquote style={{whiteSpace:"pre-wrap"}}>{f.quote}</blockquote>
-            <p className="muted">Pending human review — confirm the proposed interpretation against the original PDF.</p>
-          </div>)}
-        </details>)}
-      </section>
-      <section className="review">
-        <h2>Structured metadata · source-linked proposals</h2>
-        <p className="muted">Extracted from explicit labels and section text; never inferred from diagnoses or clinical knowledge. Every proposed value starts unverified. Select an individual value to edit or reject it after checking the source.</p>
-        <p><strong>{metadata.length}</strong> candidate fields · <strong>{verifiedMetadata}</strong> human verified · <strong>{metadata.filter(m=>m.status==="PendingHumanReview").length}</strong> pending</p>
-        {metadata.length === 0 && <p>No clearly labeled fields were detected. Inspect the original document and enter necessary details manually in a later reviewed workflow; no missing values have been invented.</p>}
-        {metadataGroups.map(group=>{
-          const fields=metadata.filter(m=>m.category===group);
-          return fields.length ? <details key={group} open={group==="Patient"||group==="Diagnoses"}>
-            <summary><strong>{group}</strong> ({fields.length})</summary>
-            {fields.map(m=><fieldset key={m.id} className="question">
-              <legend>{m.field} · Page {m.page}</legend>
-              <label>Extracted value<textarea rows={2} value={m.value} onChange={e=>updateMetadata(m.id,{value:e.target.value})}/></label>
-              <p className="muted"><strong>Source passage:</strong> {m.excerpt}</p>
-              <label>Human verification<select value={m.status} onChange={e=>updateMetadata(m.id,{status:e.target.value as MetadataCandidate["status"]})} disabled={busy}>
-                <option value="PendingHumanReview">Pending human review</option>
-                <option value="HumanVerified">Verified against original record</option>
-                <option value="Rejected">Reject extracted value</option>
-              </select></label>
-            </fieldset>)}
-          </details> : null;
-        })}
-        <div className="review">
-          <h3>Prefill application fields</h3>
-          <p className="muted">After verifying individual labeled values against the original document, send them to the application as suggestions. This does not automatically overwrite the interview or treat model output as fact. Conflicting values within the same document are excluded.</p>
-          {documentCase!==caseReference&&<p className="error">This document was ingested for {documentCase}. Switch back to that case or ingest it again; its fields will not be applied to another case.</p>}
-          <p><strong>{fillCandidates.length}</strong> verified, eligible applicant fields</p>
-          <button type="button" className="primary" disabled={busy||fillCandidates.length===0}
-             onClick={()=>onPrefill(fillCandidates,documentCase)}>Review {fillCandidates.length} suggestions in Application Preparation →</button>
-        </div>
-        <p className="muted">Clinical fields are candidate text excerpts, not normalized diagnoses or verified ICD-10 codes. Values and review selections are in memory only.</p>
-      </section>
-      <section className="review">
-        <h2>Page-by-page evidence passages</h2>
-        <p className="muted">Each passage retains its original page number. Expand to check the extracted wording against the actual source PDF.</p>
-        {segments.map(s=><details key={`${s.page}-${s.index}`} style={{marginBottom:"0.75rem"}}>
-          <summary><strong>Page {s.page}, passage {s.index}</strong> — {s.error ? "Classification unavailable" : s.result ? (TYPE_LABELS[s.result.document_type?.answer?.choice ?? ""] ?? "Classification uncertain") : "Awaiting analysis"}</summary>
-          <p style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{s.text}</p>
-          {s.result && <>
-            <p><strong>Classification:</strong> {TYPE_LABELS[s.result.document_type?.answer?.choice ?? ""] ?? "Undetermined"} · confidence {confidence(s.result.document_type?.answer) === undefined ? "unavailable" : Math.round(confidence(s.result.document_type?.answer)!*100)+"%"}</p>
-            <p><strong>Functional evidence signal:</strong> {typeof s.result.functional_evidence?.answer?.noul === "number" ? "Model score available (review original source; not a clinical conclusion)" : "Not available"}</p>
-          </>}
-          {s.error && <p role="alert">Laya: {s.error}</p>}
-        </details>)}
-      </section>
-      <section className="review">
-        <h2>Human decision on document evidence</h2>
-        <p className="hint">To retain a document-level decision in the encrypted case, record a reviewer identifier (at least 3 characters) and rationale (at least 12 characters), then attach the original and save the case. A source attached without a complete review remains pending.</p>
-        <p>No findings are automatically approved. Verify completeness, OCR fidelity, provenance and model suggestions before recording a document review. This does not decide whether the applicant qualifies for SSI/SSDI or SOAR services.</p>
-        <label>Review outcome<select value={review} onChange={e=>setReview(e.target.value as Review)} disabled={busy}>
-          <option value="PendingHumanReview">Pending human review</option>
-          <option value="HumanVerified">Document evidence reviewed and verified</option>
-          <option value="Rejected">Reject proposed interpretation</option>
-          <option value="NeedsMoreEvidence">Needs additional evidence or correction</option>
-        </select></label>
-        <label>{syntheticOnly?"Fictitious reviewer identifier":"Authorized reviewer identifier"}<input value={reviewer} onChange={e=>setReviewer(e.target.value)} disabled={busy}/></label>
-        <label>Rationale<textarea rows={3} value={rationale} onChange={e=>setRationale(e.target.value)} disabled={busy} placeholder="Record what was verified and what remains uncertain."/></label>
-        {readyToReview && <p className="success" role="status">Document-level review will be recorded with the encrypted source when you attach it, then persisted by case autosave. This is not an SSA approval or individual clinical finding verification.</p>}
-      </section>
-    </>}
-  </section>;
+export default function Documents({caseReference,syntheticOnly,onPrefill,onEvidenceAttached}:{
+ caseReference:string;syntheticOnly:boolean;
+ onPrefill:(items:PrefillSuggestion[],caseReference:string)=>void;
+ onEvidenceAttached:(source:AttachedSource,caseReference:string,review?:DocumentReviewRecord)=>void;
+}){
+ const [confirmed,setConfirmed]=useState(false);
+ const [path,setPath]=useState("");
+ const [documentCase,setDocumentCase]=useState("");
+ const [document,setDocument]=useState<Document|null>(null);
+ const [metadata,setMetadata]=useState<MetadataCandidate[]>([]);
+ const [qwen,setQwen]=useState<WholeDocument|null>(null);
+ const [checked,setChecked]=useState<Record<string,boolean>>({});
+ const [narrativeChecked,setNarrativeChecked]=useState<Record<string,boolean>>({});
+ const [narrativeTarget,setNarrativeTarget]=useState(narrativeTargets[0].key);
+ const [progress,setProgress]=useState("");
+ const [busy,setBusy]=useState(false);
+ const [error,setError]=useState("");
+ const [review,setReview]=useState<Review>("PendingHumanReview");
+ const [reviewer,setReviewer]=useState("");
+ const [rationale,setRationale]=useState("");
+ const generation=useRef(0);
+ useEffect(()=>{
+  generation.current++;
+  setDocument(null);setQwen(null);setMetadata([]);setChecked({});setNarrativeChecked({});
+  setPath("");setDocumentCase("");setConfirmed(false);setProgress("");setError("");
+  setReview("PendingHumanReview");setReviewer("");setRationale("");setBusy(false);
+ },[caseReference,syntheticOnly]);
+ async function ingest(filePath:string){
+  const run=++generation.current;
+  setPath(filePath);setDocumentCase(caseReference);setDocument(null);setQwen(null);
+  setChecked({});setNarrativeChecked({});setMetadata([]);setError("");
+  setReview("PendingHumanReview");setReviewer("");setRationale("");
+  setBusy(true);setProgress("Extracting local text and OCR; preserving page references…");
+  try{
+   const doc=await invoke<Document>("extract_synthetic_document",{request:{path:filePath,...analysisMode(syntheticOnly)}});
+   if(generation.current!==run)return;
+   setDocument(doc);setMetadata(extractMetadata(doc.pages));
+   setProgress("Running Qwen over the full extracted document. Large documents are processed in bounded windows and merged into one JSON result…");
+   try{
+    const result=await invoke<WholeDocument>("extract_qwen_document",{
+      request:{sha256:doc.sha256,pages:doc.pages,...analysisMode(syntheticOnly)}
+    });
+    if(generation.current!==run)return;
+    if(result.document_sha256.toLowerCase()!==doc.sha256.toLowerCase()||result.proposed_only!==true)
+      throw new Error("The Qwen result did not match the analyzed document.");
+    setQwen(result);
+    setProgress(result.analysis_complete
+      ?"Qwen JSON ready for human review. No model finding has been accepted automatically."
+      :"Partial Qwen JSON: failed or unreadable pages need human examination or re-acquisition.");
+   }catch(e){
+    if(generation.current===run){
+      setError("Local Qwen document analysis unavailable: "+String(e)+". OCR and manually reviewed fields remain accessible.");
+      setProgress("Local OCR ready; Qwen analysis incomplete.");
+    }
+   }
+  }catch(e){if(generation.current===run)setError(String(e));}
+  finally{if(generation.current===run)setBusy(false);}
+ }
+ async function browse(){
+  if(!confirmed||busy)return;
+  try{
+   const file=await open({multiple:false,directory:false,
+    title:syntheticOnly?"Select fictional medical evidence":"Select locally authorized medical evidence",
+    filters:[{name:"PDF and images",extensions:["pdf","png","jpg","jpeg","tif","tiff"]}]});
+   if(typeof file==="string")await ingest(file);
+  }catch(e){setError("Unable to select document: "+String(e));}
+ }
+ async function attachDocument(){
+  if(!document||!path||documentCase!==caseReference||busy)return;
+  const run=generation.current;
+  setError("");setBusy(true);
+  try{
+   const attached=await invoke<AttachedSource>("attach_evidence_document",{request:{
+    source_path:path,case_reference:caseReference,expected_sha256:document.sha256,
+    ...analysisMode(syntheticOnly)
+   }});
+   if(run!==generation.current)return;
+   const humanReview:DocumentReviewRecord|undefined=
+    review!=="PendingHumanReview"&&reviewer.trim().length>=3&&rationale.trim().length>=12
+     ?{outcome:review,reviewerId:reviewer.trim(),rationale:rationale.trim(),
+       recordedAt:new Date().toISOString(),documentSha256:document.sha256}
+     :undefined;
+   onEvidenceAttached(attached,caseReference,humanReview);
+  }catch(e){if(run===generation.current)setError("Encrypted source attachment failed: "+String(e));}
+  finally{if(run===generation.current)setBusy(false);}
+ }
+ function updateMetadata(id:string,patch:Partial<MetadataCandidate>){
+  setMetadata(old=>old.map(x=>x.id===id?{...x,...patch,status:patch.value!==undefined?"PendingHumanReview":(patch.status??x.status)}:x));
+  setReview("PendingHumanReview");
+ }
+ const directSuggestions=document&&documentCase===caseReference?reviewedSuggestions(metadata,document.sha256,documentCase):[];
+ const modelSuggestions=document&&qwen&&documentCase===caseReference?verifiedQwenPrefills(qwen.field_suggestions,checked,document.sha256):[];
+ const filledSuggestions=[...directSuggestions,...modelSuggestions].filter((item,index,all)=>
+  all.findIndex(other=>other.key===item.key)===index);
+ const selectedNarratives=qwen?.findings.filter((f,i)=>narrativeChecked[proposalId(f,i)])??[];
+ const narrativeSuggestion:PrefillSuggestion[]=
+  document&&selectedNarratives.length>0?[{
+   key:narrativeTarget,label:narrativeTargets.find(t=>t.key===narrativeTarget)?.label??"Narrative evidence",
+   value:selectedNarratives.map(f=>`Medical record p. ${f.page} [${f.category.replace(/_/g," ")}]: "${f.quote}"`).join("\n\n"),
+   page:selectedNarratives[0].page,excerpt:selectedNarratives.map(f=>f.quote).join(" | "),
+   documentSha256:document.sha256,
+   source:`Document SHA-256 ${document.sha256} · selected source quotations · practitioner verified`
+  }]:[];
+ const canSubmitSuggestions=!!document&&documentCase===caseReference&&!busy;
+ return <section className="panel" aria-label="Local evidence and document JSON analysis">
+  <div className="eyebrow">{syntheticOnly?"LOCAL DOCUMENT AI · SYNTHETIC ONLY":"RESTRICTED LOCAL DOCUMENT PROCESSING · NOT SECURITY-APPROVED"}</div>
+  <h1>2 · Evidence: local document to structured JSON</h1>
+  <p className="intro">Qwen, not Laya, examines the extracted text of the complete uploaded document. Long sources use bounded page-anchored windows and return a single combined JSON object. OCR, Qwen interpretations and narrative suggestions are unverified until reviewed. No cloud API is used.</p>
+  <label className="checkline"><input type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/>
+   {syntheticOnly?"The selected document contains fictional information only.":"My nonprofit authorizes this locally restricted document processing; I understand the build is not approved for production PHI."}
+  </label>
+  <button type="button" className="primary" disabled={!confirmed||busy} onClick={()=>void browse()}>Select and analyze local document…</button>
+  {path&&<p className="hint" style={{overflowWrap:"anywhere"}}>Local source: {path}</p>}
+  {busy&&<progress aria-label="Local document analysis in progress"/>}
+  {progress&&<p role="status">{progress}</p>}
+  {error&&<div className="error" role="alert">{error}</div>}
+  {document&&<>
+   <section className="review">
+    <h2>One structured document record</h2>
+    <p>{document.pages.length} pages · SHA-256 {document.sha256.slice(0,16)}… · {qwen?.processed_windows??0}/{qwen?.total_windows??"?"} extraction windows</p>
+    {qwen?<><p><strong>Inference:</strong> {qwen.backend} · {qwen.model}</p>
+      <p><strong>Analysis:</strong> {qwen.analysis_complete?"All machine-readable windows processed":"INCOMPLETE — inspect unreadable and failed sections"}</p>
+      {qwen.summary&&<p style={{whiteSpace:"pre-wrap"}}>{qwen.summary}</p>}
+      {qwen.unreadable_pages.length>0&&<p className="field-warning">Unreadable OCR pages: {qwen.unreadable_pages.join(", ")}. Do not treat missing text as missing clinical evidence.</p>}
+      {qwen.failed_windows.map((f,i)=><p className="field-warning" key={i}>Page {f.page}, window {f.window}: {f.message}</p>)}
+      <details><summary>View structured JSON proposals (read-only)</summary>
+       <pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere",maxHeight:"20rem",overflow:"auto"}}>{JSON.stringify(qwen,null,2)}</pre>
+       <p className="hint">This JSON remains in local application memory. Only individually reviewed interview answers and the encrypted original become case data.</p>
+      </details>
+    </>:<p>Local Qwen has not returned a document analysis. Manually verify any usable OCR.</p>}
+    <button type="button" className="secondary" disabled={busy||documentCase!==caseReference}
+      onClick={()=>void attachDocument()}>Attach original to encrypted case →</button>
+    <p className="hint">Original SHA-256 is checked again on attachment. A document review does not validate all medical findings.</p>
+   </section>
+   <section className="review">
+    <h2>Interview answers proposed by source documents</h2>
+    <p className="hint">Verify each candidate against the original, not just OCR. Select only values you have checked. Nothing overwrites an existing interview answer.</p>
+    {qwen?.field_suggestions.map((f,i)=>{
+     const id=proposalId(f,i);
+     return <label className="checkline" key={id}><input type="checkbox" checked={!!checked[id]} onChange={e=>setChecked(prev=>({...prev,[id]:e.target.checked}))}/>
+      <span><strong>{f.label} · page {f.page}</strong>: {f.key==="person.ssn"?"[restricted value]":f.value}
+       <small>Exact source OCR: {f.quote}</small><small>Check only after verifying original document</small></span>
+     </label>;
+    })}
+    {metadataCategories.map(group=>{
+     const entries=metadata.filter(m=>m.category===group);
+     return entries.length?<details key={group} open={group==="Patient"}>
+      <summary>Explicitly labeled OCR values · {group} ({entries.length})</summary>
+      {entries.map(m=><fieldset className="question" key={m.id}>
+       <legend>{m.field} — page {m.page}</legend>
+       <label>OCR value<textarea rows={2} value={m.value} onChange={e=>updateMetadata(m.id,{value:e.target.value})}/></label>
+       <p className="hint">Source OCR: {m.excerpt}</p>
+       <label>Verification<select value={m.status} disabled={busy} onChange={e=>updateMetadata(m.id,{status:e.target.value as MetadataCandidate["status"]})}>
+        <option value="PendingHumanReview">Not verified</option>
+        <option value="HumanVerified">Verified against original</option>
+        <option value="Rejected">Rejected</option>
+       </select></label>
+      </fieldset>)}
+     </details>:null;
+    })}
+    <p><strong>{filledSuggestions.length}</strong> reviewed field proposals available.</p>
+    <button type="button" className="primary" disabled={!canSubmitSuggestions||filledSuggestions.length===0}
+     onClick={()=>onPrefill(filledSuggestions,documentCase)}>1 · Review these in the interview →</button>
+   </section>
+   <section className="review">
+    <h2>Narrative evidence candidates</h2>
+    <p className="hint">Source quotations are not applicant testimony. Select passages reviewed against the original and send them to a blank narrative answer for editing. Never auto-append to or overwrite existing answers.</p>
+    {qwen?.findings.map((f,i)=>{
+     const id=proposalId(f,i);
+     return <label className="checkline" key={id}>
+      <input type="checkbox" checked={!!narrativeChecked[id]} onChange={e=>setNarrativeChecked(prev=>({...prev,[id]:e.target.checked}))}/>
+      <span><strong>Page {f.page} · {f.category.replace(/_/g," ")}</strong>: {f.value}
+       <small>Source OCR: {f.quote}</small></span>
+     </label>;
+    })}
+    {qwen?.findings.length===0&&<p className="hint">No source-supported AI findings available. This does not mean there is no relevant evidence.</p>}
+    <label>Interview narrative field
+     <select value={narrativeTarget} onChange={e=>setNarrativeTarget(e.target.value)}>
+      {narrativeTargets.map(t=><option value={t.key} key={t.key}>{t.label}</option>)}
+     </select>
+    </label>
+    <button type="button" className="secondary" disabled={!canSubmitSuggestions||selectedNarratives.length===0}
+     onClick={()=>onPrefill(narrativeSuggestion,documentCase)}>Review {selectedNarratives.length} selected source quotations in interview →</button>
+   </section>
+   <section className="review">
+    <h2>Source quality and document-level review</h2>
+    {document.pages.map(p=><details key={p.page}><summary>Page {p.page} · {p.method}{p.warning?" · OCR warning":""}</summary>
+      {p.warning&&<p className="field-warning">{p.warning}</p>}
+      <pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere",maxHeight:"18rem",overflow:"auto"}}>{p.text||"[No OCR text. Inspect original and request a legible replacement if necessary.]"}</pre>
+     </details>)}
+    <label>Outcome<select value={review} onChange={e=>setReview(e.target.value as Review)} disabled={busy}>
+     <option value="PendingHumanReview">Pending human review</option>
+     <option value="HumanVerified">Document-level review completed</option>
+     <option value="Rejected">Reject proposed interpretation</option>
+     <option value="NeedsMoreEvidence">Request better copy or more evidence</option>
+    </select></label>
+    <label>Reviewer identifier<input value={reviewer} onChange={e=>setReviewer(e.target.value)}/></label>
+    <label>Review rationale<textarea rows={3} value={rationale} onChange={e=>setRationale(e.target.value)}/></label>
+    <p className="hint">To persist this document-level review with the encrypted original, enter at least three characters of reviewer ID and twelve characters of rationale, then attach the original. Extracted proposals remain session-only unless individually reviewed and applied.</p>
+   </section>
+  </>}
+ </section>;
 }

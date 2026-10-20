@@ -107,7 +107,8 @@ def geniex_completion(model, messages, *, max_tokens=650, temperature=0.2,
     )
 
 
-def request_model(text):
+def request_model(text, *, instructions=None, max_tokens=650):
+    system_prompt = instructions if instructions is not None else SYSTEM
     mode = os.environ.get("SOAR_QWEN_BACKEND", "auto").lower()
     if mode not in ("auto", "npu", "cpu"):
         raise ValueError("SOAR_QWEN_BACKEND must be auto, npu, or cpu")
@@ -123,21 +124,22 @@ def request_model(text):
             # while the same model succeeds when the key is OMITTED. Moreover,
             # the verified Windows HTTP request used one user message. Keep
             # the instruction text, but put it in that user message for GenieX.
-            user_message = "Extract source-grounded candidate findings from this SYNTHETIC passage:\n" + text
+            user_message = ("Extract source-grounded candidate findings from this SYNTHETIC passage:\n"
+                            if instructions is None else "Extract source-grounded candidate findings from these OCR page excerpts:\n") + text
             if backend == "npu":
                 geniex_messages = [{
                     "role": "user",
-                    "content": SYSTEM + "\n\n" + user_message +
+                    "content": system_prompt + "\n\n" + user_message +
                     "\nReturn strictly one JSON object. No markdown or introductory text."
                 }]
                 result = geniex_completion(
-                    model, geniex_messages, max_tokens=650,
+                    model, geniex_messages, max_tokens=max_tokens,
                     temperature=0.1, require_json=True
                 )
             else:
                 cpu_payload = {
                     "model": model, "stream": False, "temperature": 0.1,
-                    "max_tokens": 650,
+                    "max_tokens": max_tokens,
                     "response_format": {"type": "json_object"},
                     "messages": [
                         {"role": "system", "content": SYSTEM},

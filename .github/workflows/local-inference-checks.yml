@@ -9,10 +9,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify Python scripts and shell syntax
         run: |
-          python3 -m py_compile workers/qwen_worker.py scripts/probe-geniex.py workers/laya_worker.py workers/ssa_pdf_worker.py scripts/ssa3368-field-workbench.py
+          python3 -m py_compile workers/qwen_worker.py workers/qwen_document_worker.py scripts/probe-geniex.py workers/laya_worker.py workers/ssa_pdf_worker.py scripts/ssa3368-field-workbench.py
           bash -n scripts/launch-wsl.sh scripts/prepare-ssa16-template.sh scripts/prepare-ssa3368-template.sh
       - name: Test routing without network or model downloads
-        run: python3 -m unittest discover -s workers -p 'test_qwen_worker.py' -v
+        run: |
+          python3 -m unittest discover -s workers -p 'test_qwen_worker.py' -v
+          python3 -m unittest discover -s workers -p 'test_qwen_document_worker.py' -v
 
   windows-geniex-diagnostic:
     runs-on: windows-latest
