@@ -1,5 +1,6 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 mod analysis;
+mod updater;
 
 use slint::{ComponentHandle, SharedString};
 use soar_native_store::Store;
@@ -7,6 +8,7 @@ use std::{
     fs,
     path::PathBuf,
     sync::{Arc, Mutex},
+    process::Command,
     thread,
 };
 
@@ -170,6 +172,71 @@ fn smoke_import() -> Result<(), String> {
     })();
     let _ = fs::remove_dir_all(test_root);
     result
+}
+
+/// Update state deliberately excludes all claimant/case data.
+#[derive(Default)]
+struct UpdateState {
+    checking: bool,
+    staged: Option<(updater::AvailableUpdate, PathBuf)>,
+}
+
+fn update_ui(weak: slint::Weak<MainWindow>, status: String, busy: bool, ready: bool) {
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(ui) = weak.upgrade() {
+            ui.set_update_info(status.into());
+            ui.set_update_busy(busy);
+            ui.set_update_ready(ready);
+        }
+    });
+}
+
+/// Check only GitHub Releases, then automatically stage a checksum-verified
+/// installer in the application cache. Never install without a user click.
+fn begin_update_check(weak: slint::Weak<MainWindow>, state: Arc<Mutex<UpdateState>>) {
+    {
+        let Ok(mut guard) = state.lock() else { return };
+        if guard.checking {
+            return;
+        }
+        guard.checking = true;
+    }
+    update_ui(weak.clone(), "Checking releases...".into(), true, false);
+    thread::spawn(move || {
+        let result = (|| -> Result<String, String> {
+            match updater::check()? {
+                updater::Lookup::NoPublished => Ok("No updates published yet".into()),
+                updater::Lookup::UpToDate => {
+                    Ok(format!("v{} is current", env!("CARGO_PKG_VERSION")))
+                }
+                updater::Lookup::Available(release) => {
+                    let version = release.version.to_string();
+                    let weak_progress = weak.clone();
+                    let staged = updater::stage(&release, move |percent| {
+                        update_ui(
+                            weak_progress.clone(),
+                            format!("Update v{version}: {percent}%"),
+                            true,
+                            false,
+                        );
+                    })?;
+                    let mut guard = state.lock().map_err(|e| e.to_string())?;
+                    guard.staged = Some((release.clone(), staged));
+                    Ok(format!("v{} ready", release.version))
+                }
+            }
+        })();
+        let mut ready = false;
+        if let Ok(mut guard) = state.lock() {
+            guard.checking = false;
+            ready = guard.staged.is_some();
+        }
+        let status = match result {
+            Ok(s) => s,
+            Err(e) => format!("Update unavailable: {e}"),
+        };
+        update_ui(weak, status, false, ready);
+    });
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -487,6 +554,76 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
         });
     }
+    let update_state = Arc::new(Mutex::new(UpdateState::default()));
+    {
+        let state = update_state.clone();
+        let weak = ui.as_weak();
+        ui.on_check_updates(move || begin_update_check(weak.clone(), state.clone()));
+    }
+    {
+        let state = update_state.clone();
+        let context = context.clone();
+        let weak = ui.as_weak();
+        ui.on_install_update(move || {
+            let staged = state.lock().ok().and_then(|guard| {
+                if guard.checking { None } else { guard.staged.clone() }
+            });
+            let Some((release, path)) = staged else {
+                if let Some(ui) = weak.upgrade() {
+                    ui.set_update_info("No verified update downloaded".into());
+                }
+                return;
+            };
+            if context.lock().is_ok_and(|ctx| ctx.busy) {
+                if let Some(ui) = weak.upgrade() {
+                    ui.set_update_info("Finish analysis before updating".into());
+                }
+                return;
+            }
+            match updater::verify_file(&release, &path) {
+                Ok(true) => {}
+                Ok(false) | Err(_) => {
+                    if let Some(ui) = weak.upgrade() {
+                        ui.set_update_ready(false);
+                        ui.set_update_info("Update verification failed; download again".into());
+                    }
+                    if let Ok(mut guard) = state.lock() {
+                        guard.staged = None;
+                    }
+                    return;
+                }
+            }
+            let confirmation = rfd::MessageDialog::new()
+                .set_title("Install SOAR Desk update?")
+                .set_description(format!(
+                    "Version {} is ready. Installing will close SOAR Desk. Stored cases, original records and local models remain in your user data folder. Continue?",
+                    release.version
+                ))
+                .set_buttons(rfd::MessageButtons::YesNo)
+                .show();
+            if confirmation != rfd::MessageDialogResult::Yes {
+                return;
+            }
+            // Per-user Inno Setup installer. It never touches %LocalAppData%/SOAR Desk.
+            match Command::new(&path)
+                .args(["/SILENT", "/NORESTART", "/CLOSEAPPLICATIONS"])
+                .spawn()
+            {
+                Ok(_) => {
+                    // Current edits are persisted synchronously by save_field.
+                    // Release file handles before Inno replaces app binaries.
+                    std::process::exit(0);
+                }
+                Err(error) => {
+                    if let Some(ui) = weak.upgrade() {
+                        ui.set_update_info(format!("Cannot launch installer: {error}").into());
+                    }
+                }
+            }
+        });
+    }
+    // Nonblocking check at startup. Downloads remain optional to install.
+    begin_update_check(ui.as_weak(), update_state);
     ui.run()?;
     Ok(())
 }
