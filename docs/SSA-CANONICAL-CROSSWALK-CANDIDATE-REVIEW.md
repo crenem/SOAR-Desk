@@ -51,7 +51,7 @@ python3 scripts/propose-ssa-crosswalk.py \
 The script writes three gitignored review-only artifacts:
 
 1. `ssa-canonical-crosswalk-candidates.json`: source-hashed widget references and proposed dictionary keys, never approved.
-2. `ssa-review-queue-with-proposals.csv`: **all** source review rows preserved, with proposals attached only to the 35 exact widget/page matches.
+2. `ssa-review-queue-with-proposals.csv`: **all** source review rows preserved, with proposals attached only to the 35 exact widget/page matches. Every PDF widget additionally receives nearby printed-text and preceding numbered-question **proximity hints**, explicitly unverified and never used for automatic mappings.
 3. `ssa-cross-form-overlap.csv`: canonical key overlap across forms and respondent distinctions.
 
 The program refuses hash mismatches, wrong page/question cues, missing or ambiguous widget names, duplicate source assignments, any pre-approved source queue, missing source rows, and non-text candidate bindings. It never alters official blank PDFs or claimant data and does not produce a submission package.
