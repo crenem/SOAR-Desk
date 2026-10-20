@@ -3,7 +3,7 @@
 # Restricted development beta: use synthetic information for testing.
 set -Eeuo pipefail
 
-ROOT="$HOME/Projects/SOAR-Desk"
+ROOT="${SOAR_DESK_ROOT:-$HOME/Projects/SOAR-Desk}"
 LLAMA="$HOME/Projects/llama.cpp"
 PORT=8080
 MODEL_REPO="Qwen/Qwen3-4B-GGUF:Q4_K_M"
