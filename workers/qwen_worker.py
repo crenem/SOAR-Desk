@@ -124,7 +124,8 @@ def request_model(text, *, instructions=None, max_tokens=650):
             # while the same model succeeds when the key is OMITTED. Moreover,
             # the verified Windows HTTP request used one user message. Keep
             # the instruction text, but put it in that user message for GenieX.
-            user_message = ("Extract source-grounded candidate findings from this SYNTHETIC passage:\n"\n                            if instructions is None else "Extract source-grounded candidate findings from these OCR page excerpts:\n") + text
+            user_message = ("Extract source-grounded candidate findings from this SYNTHETIC passage:\n"
+                            if instructions is None else "Extract source-grounded candidate findings from these OCR page excerpts:\n") + text
             if backend == "npu":
                 geniex_messages = [{
                     "role": "user",
