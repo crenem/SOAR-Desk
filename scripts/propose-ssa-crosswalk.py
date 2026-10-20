@@ -110,6 +110,35 @@ def reconcile_queue(inventory, filename):
     return counts
 
 
+def source_neighborhoods(inventory):
+    """Geometry-only printed line suggestions for every widget, not mappings."""
+    neighborhood = {}
+    for form, meta in inventory["forms"].items():
+        for page in meta["pages"]:
+            lines = page["printed_lines"]
+            for widget in page["interactive_widgets"]:
+                rect = widget["bbox"]
+                wy = (rect[1] + rect[3]) / 2
+                distances = []
+                for line in lines:
+                    r = line["bbox"]
+                    vertical = max(0, rect[1]-r[3], r[1]-rect[3])
+                    horizontal = max(0, rect[0]-r[2], r[0]-rect[2])
+                    after_penalty = 14 if (r[1]+r[3])/2 > wy+4 else 0
+                    distances.append((vertical + 0.23*horizontal+after_penalty, line))
+                distances.sort(key=lambda entry: entry[0])
+                nearby = [line["text"].strip()[:140]
+                          for distance, line in distances[:3] if distance < 180]
+                numbered = [line for line in lines
+                            if line.get("candidate_question_number")
+                            and line["bbox"][1] <= wy + 10]
+                preceding = max(numbered, key=lambda line: line["bbox"][1]) if numbered else None
+                neighborhood[(form,widget["item_id"])] = {
+                    "nearby_lines":nearby,
+                    "preceding_question":preceding["text"][:180] if preceding else ""}
+    return neighborhood
+
+
 def generate(inventory, queue_path, seed, output, pdfs=None, require_pdfs=False):
     if inventory.get("missing") or inventory.get("errors") or len(inventory["forms"]) != 7:
         raise ValueError("Seven error-free source forms required")
@@ -117,6 +146,7 @@ def generate(inventory, queue_path, seed, output, pdfs=None, require_pdfs=False)
     row_counts = reconcile_queue(inventory, queue_path)
     proposals = seed_candidates(inventory, seed)
     by_widget = {(p["form_id"], p["widget_item_id"]): p for p in proposals}
+    neighbors = source_neighborhoods(inventory)
     by_key = defaultdict(list)
     for p in proposals:
         by_key[p["canonical_key"]].append(p)
@@ -160,7 +190,8 @@ def generate(inventory, queue_path, seed, output, pdfs=None, require_pdfs=False)
          (output/"ssa-review-queue-with-proposals.csv").open("w", newline="", encoding="utf-8") as out:
         reader = csv.DictReader(original)
         columns = list(reader.fieldnames) + [
-            "proposed_canonical_key", "proposed_subject", "proposed_source_cue", "suggestion_status"]
+            "proposed_canonical_key", "proposed_subject", "proposed_source_cue", "suggestion_status",
+            "unverified_nearby_printed_lines", "unverified_preceding_numbered_question"]
         writer = csv.DictWriter(out, fieldnames=columns)
         writer.writeheader()
         for row in reader:
@@ -169,6 +200,9 @@ def generate(inventory, queue_path, seed, output, pdfs=None, require_pdfs=False)
                        proposed_subject=p["subject"] if p else "",
                        proposed_source_cue=p["source_cue"] if p else "",
                        suggestion_status=STATUS if p else "")
+            hint = neighbors.get((row["form_id"], row["item_id"]), {})
+            row["unverified_nearby_printed_lines"] = " | ".join(hint.get("nearby_lines", []))
+            row["unverified_preceding_numbered_question"] = hint.get("preceding_question", "")
             writer.writerow(row)
     with (output/"ssa-cross-form-overlap.csv").open("w", newline="", encoding="utf-8") as out:
         writer = csv.DictWriter(out, fieldnames=["canonical_key","forms","form_count",
