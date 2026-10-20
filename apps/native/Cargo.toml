@@ -1,6 +1,6 @@
 [package]
 name = "soar-desk"
-version = "0.1.0"
+version = "0.1.1-preview.1"
 edition.workspace = true
 license.workspace = true
 build = "build.rs"
@@ -15,6 +15,7 @@ dirs = "5"
 lopdf = "0.34"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 sha2 = "0.10"
+semver = "1"
 
 [build-dependencies]
 slint-build = "=1.8.0"
