@@ -26,10 +26,10 @@ const statuses:{value:AnswerStatus;label:string}[]=[
 const display=(s:Response|undefined)=>s?.status==="unknown"?"Unknown":s?.value || "Not collected";
 const fieldsOf=(rows:Rows,key:string)=>rows[key]??[];
 type View="unified"|"overview"|"interview"|"review"|"evidence"|"package"|"submissions"|"casefiles"|"signatures";
-type Props={onCaseChange?:(ref:string)=>void;onCaseModeChange?:(syntheticOnly:boolean)=>void;prefill?:PrefillSuggestion[];onPrefillApplied?:()=>void;onProgress?:(items:FormCoverage[])=>void;navigate?:{target:MissingTarget;token:number}|null;stageJump?:{view:"unified"|"package";token:number}|null;inboundEvidence?:{source:AttachedSource;caseReference:string;sequence:number;documentReview?:DocumentReviewRecord}|null;onEvidenceReceived?:()=>void};
+type Props={onCaseChange?:(ref:string)=>void;onCaseModeChange?:(syntheticOnly:boolean)=>void;prefill?:PrefillSuggestion[];onPrefillApplied?:()=>void;onProgress?:(items:FormCoverage[])=>void;onInterviewProgress?:(progress:{answered:number;possible:number})=>void;navigate?:{target:MissingTarget;token:number}|null;stageJump?:{view:"unified"|"package";token:number}|null;inboundEvidence?:{source:AttachedSource;caseReference:string;sequence:number;documentReview?:DocumentReviewRecord}|null;onEvidenceReceived?:()=>void};
 
 
-export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,prefill=[],onPrefillApplied,onProgress,navigate,stageJump,inboundEvidence,onEvidenceReceived}:Props){
+export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,prefill=[],onPrefillApplied,onProgress,onInterviewProgress,navigate,stageJump,inboundEvidence,onEvidenceReceived}:Props){
  const [programs,setPrograms]=useState<Program[]>(["ssi","ssdi"]);
 
  const [formId,setFormId]=useState<FormId>("SSA-3368-BK");
@@ -208,6 +208,7 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
  const activeForms=useMemo(()=>FORMS.filter(f=>f.programs.some(p=>programs.includes(p))&&(f.id!=="SSA-8001-BK"||includeDeferred)),[programs,includeDeferred]);
  const unifiedIndex=useMemo(()=>buildUnifiedInterview(activeForms),[activeForms]);
  const unifiedStats=useMemo(()=>unifiedProgress(unifiedIndex,answers,rows),[unifiedIndex,answers,rows]);
+ useEffect(()=>{onInterviewProgress?.({answered:unifiedStats.answered,possible:unifiedStats.possible});},[onInterviewProgress,unifiedStats.answered,unifiedStats.possible]);
  const activeDomain=unifiedIndex.domains.find(d=>d.id===domainId)??unifiedIndex.domains[0];
  const current=FORM_BY_ID[formId];
  const validCurrent=activeForms.some(f=>f.id===formId)?current:activeForms[0];
@@ -425,8 +426,8 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
      <button type="button" className="secondary" onClick={()=>onPrefillApplied?.()}>Dismiss suggestions</button>
    </section>}
 
-   <h1>Application workspace</h1>
-   <p className="intro">One applicant interview, reusable facts and separate SSA form sections. {syntheticOnly?"Training mode is fictional-only.":"Restricted local-case mode uses encrypted snapshots but has not passed a deployment security review."} Autosave starts only after creating or unlocking a vault. Official form mappings and submission pathways remain incomplete.</p>
+   <h1>Applicant interview</h1>
+   <p className="intro">One guided interview captures reusable applicant facts. Evidence is reviewed separately; SSA forms are assembled from the shared case record. {syntheticOnly?"Training mode is fictional-only.":"Restricted local-case mode uses encrypted snapshots but has not passed a deployment security review."} Autosave starts only after creating or unlocking a vault. Official form mappings and submission pathways remain incomplete.</p>
    <div className="panel intake-setup">
      <div className="fieldgrid">
       <label>{syntheticOnly?"Fictional case reference":"Opaque local case reference"}<input value={caseLabel} onChange={e=>setCaseLabel(e.target.value)} disabled={submissionLog.records.length>0||!!activeVault} maxLength={80}/></label>
@@ -442,9 +443,16 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
      <button type="button" className="secondary" disabled={!syntheticOnly||!!activeVault} onClick={newLocalCase}>New restricted local case…</button></div>
      {!syntheticOnly&&<p className="field-warning">Local case beta: store only in an encrypted vault. This build has no SQLCipher, authenticated staff roles, independently anchored audit, or encrypted source-document storage. Do not treat this as an SSA filing system or a certified medical-record system.</p>}
    </div>
-   <div className="intake-tabs" role="group" aria-label="Application views">
-    {(["unified","review","evidence","package","overview","interview","signatures","submissions","casefiles"] as View[]).map(v=><button type="button" key={v} className={view===v?"active":""} onClick={()=>setView(v)}>{v==="unified"?"1 · Unified interview":v==="overview"?"Form inventory":v==="interview"?"Form-specific crosswalk":v==="review"?"Review gaps":v==="evidence"?"Evidence register":v==="signatures"?"Acknowledgments":v==="package"?"3 · Package":v==="casefiles"?"Case files":"Submissions & receipts"}</button>)}
+   <div className="intake-tabs" role="group" aria-label="Applicant workflow views">
+    {(["unified","review","evidence","package","casefiles"] as View[]).map(v=><button type="button" key={v} className={view===v?"active":""} onClick={()=>setView(v)}>{v==="unified"?"Interview":v==="review"?"Outstanding answers":v==="evidence"?"Evidence register":v==="package"?"Package review":"Encrypted case files"}</button>)}
    </div>
+   <details className="advanced-mapping-tools">
+    <summary>Advanced: SSA source mapping and quality-control tools</summary>
+    <p className="hint">These views exist for engineering and quality control, not the applicant interview. SSA field counts are not filing-readiness measures.</p>
+    <div className="intake-tabs" role="group" aria-label="Advanced SSA mapping tools">
+     {(["overview","interview","signatures","submissions"] as View[]).map(v=><button type="button" key={v} className={view===v?"active":""} onClick={()=>setView(v)}>{v==="overview"?"Source form inventory":v==="interview"?"Form mapping diagnostics":v==="signatures"?"Internal acknowledgments":"Submission tracker"}</button>)}
+    </div>
+   </details>
    {view==="unified"&&<section className="panel">
     <div className="eyebrow">STEP 1 · ENTER ONCE, REUSE ACROSS SSA FORMS</div>
     <h2>Unified applicant interview</h2>
@@ -509,8 +517,8 @@ export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,pref
      </>}
    </section>}
    {view==="review"&&<section className="panel">
-    <h2>Interview coverage and next actions</h2>
-    <p className="intro"><strong>{captured} / {possible}</strong> currently applicable mapped question groups captured. This does not measure whether SSA will accept a particular form.</p>
+    <h2>Applicant interview: outstanding answers</h2>
+    <p className="intro"><strong>{unifiedStats.answered} / {unifiedStats.possible}</strong> unique mapped interview groups captured. This does not measure whether SSA will accept a particular form.</p>
     {total.map(({f,p})=><details key={f.id} className="intake-review" open={p.captured<p.total}>
       <summary><strong>{f.id}</strong> — {p.captured}/{p.total} captured · {p.verified} human-verified</summary>
       <p className="hint">{f.note}</p>
