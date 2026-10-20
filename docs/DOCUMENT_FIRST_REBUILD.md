@@ -41,6 +41,17 @@ SQLite is the authoritative transactional store for all case state, document met
 - Keep errors inline by default; show explanatory text only on interaction or when remediation is required. Distinguish persistence errors from AI/source verification warnings.
 - No separate save controls for routine edits; blur and idle autosave remain mandatory.
 
+## Schema-driven typed controls
+- Every editable field has a declarative schema specifying semantic type, allowed values, nullability, units, constraints, provenance and SSA mapping. UI widgets derive from this schema rather than rendering generic text inputs.
+- Date: calendar picker with keyboard entry and validated ISO date persistence; datetime: date/time picker with explicit timezone where needed. No fabricated day/month for partial dates; support approximate/unknown date precision separately.
+- Boolean: checkbox when truly binary; explicit radio choices for yes/no/unknown/not applicable/not documented when relevant.
+- Small mutually exclusive enumerations: segmented button grid or radio group; large enumerations: searchable single-select; multiple selections: checkbox grid or multiselect.
+- Quantities: numeric input with units, limits and decimal precision; diagnoses: searchable code/name selector with code system and version plus documented-versus-suggested status; medication: structured name, dose, route and frequency; evidence: document/page picker; narrative: multiline editor; repeated entities: editable structured rows.
+- Native Slint widgets should be keyboard accessible, support focus and error states, and retain minimalist inline trailing save/status markers without covering entered values.
+- Validate on change and before persistence without erasing draft input; commit valid typed values via blur and idle autosave. Surface actionable validation errors inside the field and via accessible explanations. Do not coerce missing data to false or zero.
+- Form field mappings preserve type and provenance. AI extraction populates suggestions; user-verified values remain authoritative. Schema migrations are versioned and tested.
+- Tests cover date parsing and partial dates, enum and multi-select round trips, units, missingness distinctions, keyboard operation, SSA form mapping, and persistence across restart.
+
 ## Reliability
 - Stream generation tokens through Rust async channels into the Slint UI with job and artifact IDs; cancellation and recovery.
 - Token budget and document chunking; map/reduce for large documents.
