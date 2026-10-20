@@ -52,6 +52,14 @@ SQLite is the authoritative transactional store for all case state, document met
 - Form field mappings preserve type and provenance. AI extraction populates suggestions; user-verified values remain authoritative. Schema migrations are versioned and tested.
 - Tests cover date parsing and partial dates, enum and multi-select round trips, units, missingness distinctions, keyboard operation, SSA form mapping, and persistence across restart.
 
+## Responsive compact field layout
+- Use a responsive, content-aware grid for short questions rather than allocating a full row to every field. Typical desktop layouts use 2–3 columns where labels, controls, and validation remain readable; narrow windows collapse to one column.
+- Group semantically related fields in the same row (first/middle/last name; city/state/ZIP; employment start/end; diagnosis code/status). Allocate column spans according to expected value length, not equal widths by default.
+- Long narratives, document previews, streamed summaries, complex selection controls, and important explanatory content may span the full available width.
+- Maintain natural keyboard tab order and accessible reading order across columns; inline status indicators stay within each field boundary.
+- No horizontal scrolling for ordinary data entry; honor Windows display scaling, text resizing, and minimum target sizes. Preserve dirty state and pending autosaves during responsive reflow.
+- Test 100%, 150%, and 200% scaling and narrow/windowed desktop layouts.
+
 ## Reliability
 - Stream generation tokens through Rust async channels into the Slint UI with job and artifact IDs; cancellation and recovery.
 - Token budget and document chunking; map/reduce for large documents.
