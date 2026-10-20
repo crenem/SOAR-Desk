@@ -335,9 +335,24 @@ def audit_dir(folder: Path, require_download_manifest=False) -> dict:
 
 
 def review_queue_rows(inventory):
-    """Generate a lossless row for every extracted line and every PDF widget."""
+    """One page review row plus every extracted line and PDF widget."""
     for form_id, form in inventory["forms"].items():
         for page in form["pages"]:
+            # The review ledger must include blank/image-only pages as well:
+            # an absence of extractable text does NOT indicate no questions.
+            yield {
+                "form_id": form_id, "source_sha256": form["source_sha256"],
+                "item_id": stable_id(form["source_sha256"], page["page"], "page", 0),
+                "item_type": "page_review", "page": page["page"], "subindex": 0,
+                "candidate_question_number": "",
+                "candidate_semantics": "|".join(page["page_review_flags"]),
+                "text_or_widget": "FULL PAGE: visually verify all printed, image, checkbox, signature and continuation fields",
+                "pdf_widget_kind": "",
+                "widget_on_states": "",
+                "bbox": json.dumps(page["crop_box"]),
+                "review_status": "UNREVIEWED", "approved_canonical_key": "",
+                "reviewer": "", "reviewed_at_utc": "", "review_notes": "",
+            }
             for line in page["printed_lines"]:
                 yield {
                     "form_id": form_id,
