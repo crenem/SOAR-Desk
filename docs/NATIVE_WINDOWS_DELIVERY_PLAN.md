@@ -45,4 +45,4 @@ A user installs one exe and can create a case, upload multiple documents, see bo
 ## Delivery limitation
 Local GGUF models are multi-GB; a one-time licensed model download may be necessary after installer launch. This must be integrated and tested rather than asking users to set up a server manually. CI cannot stand in for Windows installation/security acceptance.
 
-**Progress (Oct 20, 2026):** requirements committed, SQLite store scaffold committed. Native GUI and release pipeline in progress; completion and real-PHI authorization not yet established.
+**Progress (Oct 20, 2026):** Rust/Slint preview installer builds in Windows CI, with SQLite case persistence, original document import, basic PDF text extraction, a two-pass local AI pipeline, streaming display, and versioned artifacts. OCR for scanned PDFs/images, SSA draft forms, at-rest encryption, existing-data migration, and real Windows install/upgrade testing are not complete. Synthetic data only.
