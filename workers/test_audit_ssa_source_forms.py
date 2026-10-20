@@ -148,6 +148,21 @@ class SourceFormAuditTests(unittest.TestCase):
                 "NO_DOWNLOAD_MANIFEST_OFFICIAL_SOURCE_UNCONFIRMED"
             )
 
+    def test_conflicting_edition_markers_are_reported_across_pages(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ssa-3373-bk.pdf"
+            pdf = fitz.open()
+            page_a = pdf.new_page()
+            page_a.insert_text((30, 35), "SSA-3373-BK (08-2026)")
+            page_b = pdf.new_page()
+            page_b.insert_text((30, 35), "SSA-3373-BK (10-2026)")
+            pdf.save(path)
+            pdf.close()
+            report = audit.inspect_blank(path, "SSA-3373-BK")
+            self.assertEqual(len(report["printed_edition_markers"]), 2)
+            self.assertIn("MULTIPLE_PRINTED_EDITION_MARKERS_REVIEW", report["warnings"])
+            self.assertFalse(report["approved_for_pdf_population"])
+
     def test_invalid_pdf_symlink_and_unrecognized_form_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / "ssa-16-bk.pdf"
