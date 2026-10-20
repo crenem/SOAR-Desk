@@ -36,10 +36,11 @@ if ($LASTEXITCODE -ne 0) {
   throw "Development launcher missing at $launcher. Switch the SSA worktree to origin/$devBranch first."
 }
 
-$checkedOutBranch = (& wsl.exe -d $Distribution -e git -C $devRoot branch --show-current | Select-Object -First 1)
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($checkedOutBranch) -or $checkedOutBranch.Trim() -ne $devBranch) {
-  throw "The SSA worktree must be on '$devBranch', not '$checkedOutBranch'. Switch branches without discarding local changes."
-}
+# Do not rely on nested WSL git's PowerShell LASTEXITCODE here.
+# On Windows ARM64/WSL that exit code can report failure despite an accurate
+# stdout branch name, rejecting a valid checkout. The *Linux launcher* checks
+# the active Git branch before updating or starting the application, and fails
+# closed if it is not development/local. The installer never switches branches.
 
 $launcherDir = Join-Path $env:LOCALAPPDATA 'SOAR Desk'
 New-Item -ItemType Directory -Path $launcherDir -Force | Out-Null
