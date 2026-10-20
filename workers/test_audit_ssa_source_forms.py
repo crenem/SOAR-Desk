@@ -86,7 +86,7 @@ class SourceFormAuditTests(unittest.TestCase):
             inventory = {"forms": {"SSA-16": source}}
             rows = list(audit.review_queue_rows(inventory))
             self.assertEqual(len(rows),
-                             source["printed_line_count"] + source["interactive_widget_count"])
+                             source["source_pages"] + source["printed_line_count"] + source["interactive_widget_count"])
             self.assertTrue(all(row["review_status"] == "UNREVIEWED" for row in rows))
             self.assertTrue(all(not row["approved_canonical_key"] for row in rows))
             self.assertTrue(all(row["source_sha256"] == source["source_sha256"]
@@ -98,6 +98,8 @@ class SourceFormAuditTests(unittest.TestCase):
             self.assertEqual(len(parsed), len(rows))
             self.assertEqual(len({row["item_id"] for row in parsed}), len(rows))
             self.assertTrue(any(row["item_type"] == "pdf_widget" for row in parsed))
+            self.assertEqual(sum(row["item_type"] == "page_review" for row in parsed), 2)
+            self.assertTrue(any(row["item_type"] == "page_review" and row["page"] == "2" for row in parsed))
             self.assertTrue(any("signature_or_witness_candidate"
                                 in row["candidate_semantics"] for row in parsed))
 
