@@ -62,6 +62,10 @@ CONTINUATION_CUE = re.compile(
 SSA_ONLY_CUE = re.compile(
     r"\b(?:FOR\s+(?:SSA|SOCIAL SECURITY)\s+USE\s+ONLY|"
     r"DO\s+NOT\s+WRITE\s+IN\s+THIS\s+SPACE)\b", re.I)
+# Detect printed edition labels on any page; SSA sometimes serves a PDF with
+# inconsistent per-page edition markers (observed in SSA-3373 previously).
+EDITION_CUE = re.compile(
+    r"\\bSSA[- ]?\\d{1,4}(?:[- ][A-Z]{1,3})?\\s*\\(\\d{1,2}[-/]\\d{4}\\)", re.I)
 MAX_BYTES = 26 * 1024 * 1024
 MAX_PAGES = 200
 MAX_WIDGETS_PER_PAGE = 750
@@ -187,6 +191,8 @@ def inspect_blank(pdf_path: Path, form_id: str) -> dict:
                     "approved_answer_key": None,
                     "reviewed_against_printed_question": False,
                 })
+            edition_markers = sorted({m.group(0).upper() for item in lines
+                for m in EDITION_CUE.finditer(item["text"])})
             image_count = len(page.get_images(full=True))
             annotations = list(page.annots() or [])
             problems = []
@@ -203,6 +209,7 @@ def inspect_blank(pdf_path: Path, form_id: str) -> dict:
                 "size_points": [round(crop.width, 2), round(crop.height, 2)],
                 "crop_box": box(crop),
                 "image_count": image_count,
+                "printed_edition_markers": edition_markers,
                 "annotation_count": len(annotations),
                 "text_found": bool(lines),
                 "printed_lines": lines,
@@ -212,7 +219,13 @@ def inspect_blank(pdf_path: Path, form_id: str) -> dict:
                     "TEXT_NEAR_CROP_EDGE_REVIEW" in problems
                 ),
             })
+        edition_markers = sorted({marker for page in pages
+            for marker in page["printed_edition_markers"]})
         warnings = []
+        if not edition_markers:
+            warnings.append("EDITION_MARKER_NOT_MACHINE_READABLE_REVIEW_SOURCE")
+        if len(edition_markers) > 1:
+            warnings.append("MULTIPLE_PRINTED_EDITION_MARKERS_REVIEW")
         expected = EXPECTED_PAGES[form_id]
         if expected and len(pages) != expected:
             warnings.append(
@@ -232,6 +245,7 @@ def inspect_blank(pdf_path: Path, form_id: str) -> dict:
             "source_bytes": len(raw),
             "source_pages": len(pages),
             "pdf_technology": technology,
+            "printed_edition_markers": edition_markers,
             "expected_page_count_advisory": expected,
             "printed_line_count": sum(len(p["printed_lines"]) for p in pages),
             "candidate_numbered_line_count": sum(
