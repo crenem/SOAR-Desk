@@ -22,6 +22,7 @@ class DevelopmentLauncherTests(unittest.TestCase):
         self.assertIn("XDG_CONFIG_HOME=",dev)
         self.assertIn("XDG_DATA_HOME=",dev)
         self.assertIn("XDG_CACHE_HOME=",dev)
+        self.assertIn("SOAR_DESK_STATE_DIR=",dev)
         self.assertIn("SOAR_DESK_VITE_PORT=1421",dev)
         self.assertIn('actual_branch',dev)
         self.assertNotIn("reset --hard",dev)
