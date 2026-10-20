@@ -186,6 +186,8 @@ def main():
     p.add_argument("--queue", type=Path, required=True)
     p.add_argument("--seeds", type=Path, default=Path("config/ssa-canonical-seed-candidates.json"))
     p.add_argument("--out-dir", type=Path, default=Path(".local/ssa-templates/crosswalk-review"))
+    p.add_argument("--template-dir",type=Path,default=None,
+                   help="Directory holding exact blank PDFs named as in source inventory")
     p.add_argument("--pdf", action="append", default=[], help="FORM_ID=path to exact blank PDF")
     p.add_argument("--require-pdf-match", action="store_true")
     args = p.parse_args()
@@ -197,7 +199,11 @@ def main():
         if form in pdfs:
             p.error("duplicate PDF argument")
         pdfs[form] = path
-    result = generate(json.loads(args.inventory.read_text(encoding="utf-8")),
+    inventory = json.loads(args.inventory.read_text(encoding="utf-8"))
+    if args.template_dir is not None:
+        for form, meta in inventory["forms"].items():
+            pdfs.setdefault(form, args.template_dir / meta["source_filename"])
+    result = generate(inventory,
                       args.queue, json.loads(args.seeds.read_text(encoding="utf-8")),
                       args.out_dir, pdfs, args.require_pdf_match)
     print(json.dumps(result["summary"], indent=2))
