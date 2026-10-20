@@ -21,6 +21,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Test native case database
         run: cargo test -p soar-native-store
+      - name: Test native updater selection and checksum rules
+        run: cargo test -p soar-desk
       - name: Compile Rust/Slint Windows application
         run: cargo build --release -p soar-desk
       - name: Windows upload and persistence smoke test
@@ -61,3 +63,38 @@ jobs:
           path: dist/installer/SOAR-Desk-Setup.exe
           if-no-files-found: error
           retention-days: 30
+
+  publish-preview:
+    needs: windows-installer
+    if: github.event_name == 'push' && github.ref == 'refs/heads/redesign/document-first-soar'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: SOAR-Desk-Windows-Installer
+          path: dist/installer
+      - name: Publish validated native preview to GitHub Releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="$(sed -n 's/^version = "\\([^"]*\\)"/\\1/p' apps/native/Cargo.toml | head -1)"
+          test -n "$VERSION"
+          grep -Fq "#define MyAppVersion \"$VERSION\"" apps/native/installer/SOAR-Desk.iss
+          test -s dist/installer/SOAR-Desk-Setup.exe
+          TAG="v$VERSION"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Preview $TAG already published. Releases are immutable; bump Cargo and Inno versions for subsequent updates."
+            exit 0
+          fi
+          gh release create "$TAG" dist/installer/SOAR-Desk-Setup.exe \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "SOAR Desk $TAG (Windows preview)" \
+            --notes "Unsigned Windows x86-64 development preview. Native Rust/Slint, no WSL. In-app updates check GitHub Releases and verify installer SHA-256 before offering installation. **Synthetic data only:** scanned-PDF OCR, complete SSA PDF form filling, data-at-rest encryption and production privacy/security acceptance remain incomplete. Case data is stored outside the installation directory."
+          echo "Published release $TAG"
