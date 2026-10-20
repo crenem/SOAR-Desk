@@ -20,6 +20,20 @@ Case(id, created_at); Document(id, case_id, sha256, filename, mime, imported_at,
 ## Interface
 Three-pane workspace: left case/document library; center streaming analysis and versioned summaries; right facts/provenance and action controls. Primary action: Upload documents. No mandatory five-step intake wizard. Use progress states Extracting / Pass 1 / Pass 2 streaming / Saved / Error with retry.
 
+
+## Database-first persistence and autosave
+SQLite is the authoritative transactional store for all case state, document metadata, extraction results, facts, artifact versions, narrative revisions, form field values and provenance. Binary source documents and generated exports may live in a managed content-addressed vault; SQLite stores their references, hashes and lifecycle state. Do not make Markdown or in-memory UI state the system of record.
+
+- Every editable field tracks clean/dirty/saving/saved/error states and its persisted revision. On blur, commit only dirty values immediately in a transaction; never show Saved before successful commit.
+- Add a short idle debounce while typing (e.g. 500–1000 ms) and flush on navigation, application suspend/close, or case switch. Ensure keyboard-only navigation triggers the same save semantics.
+- Serialized per-field writes with monotonic revision IDs prevent an older asynchronous save from overwriting newer input; reject or reconcile stale writes rather than silently losing changes.
+- Persist form drafts, AI-generated facts, reviewer corrections and narrative edits through the same repository/service layer. AI suggestions must not silently overwrite user-verified values; store provenance and conflict state.
+- Use SQLite WAL mode, foreign keys, migrations, busy timeout and transactional updates. Set a durability policy appropriate to sensitive case data; test crash recovery and power-loss behavior rather than claiming zero data loss.
+- Append audit/revision records for edits with actor, time, previous/new value or secure diff, origin (AI/user), and source citation. Support undo/history while preserving previous artifacts.
+- Persist AI streaming progress as recoverable job state and checkpoint partial drafts, but mark only completed and validated summaries as final artifacts.
+- Database and vault backups must be consistent, restorable, encrypted at rest, and tested. Never silently discard pending edits on save errors; offer retry/recovery.
+- Acceptance tests: blur save, debounce save, keyboard tab save, rapid repeated edits, close/reopen, failed disk write, stale async response, migration, crash during save, AI/user conflict, and restoration from backup.
+
 ## Reliability
 - Stream generation tokens through Rust async channels into the Slint UI with job and artifact IDs; cancellation and recovery.
 - Token budget and document chunking; map/reduce for large documents.
@@ -31,7 +45,7 @@ Three-pane workspace: left case/document library; center streaming analysis and 
 - Do not send records to remote services without explicit configuration and authorization.
 
 ## Acceptance criteria
-A Windows-native Rust/Slint desktop build opens directly to the document-first workspace; PDFs ingest and are analyzed twice; summary text visibly streams; artifacts survive restart and further uploads; narrative is generated from all preserved artifacts; SSA forms populate sourced fields and remain editable; tests and native Windows build pass.
+A Windows-native Rust/Slint desktop build opens directly to the document-first workspace; PDFs ingest and are analyzed twice; summary text visibly streams; artifacts survive restart and further uploads; narrative is generated from all preserved artifacts; SSA forms populate sourced fields and remain editable; dirty fields persist on blur and after idle, with durable status, conflict handling, and recovery; tests and native Windows build pass.
 
 ## Migration
 Retire old form-first screens, unused demo/synthetic-only gates, and redundant launch/build variants after a tested data-preserving migration. Keep only one supported native Rust desktop application, with ARM64 and x86-64 as architectures of the same product, not separate products. Native Windows build and packaging only; no WSL, Ubuntu, Node.js, Python, Tauri or webview dependency. Validate the chosen inference backend and OCR support independently for each architecture before promising hardware acceleration.
