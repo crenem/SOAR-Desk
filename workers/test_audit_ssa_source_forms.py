@@ -111,6 +111,41 @@ class SourceFormAuditTests(unittest.TestCase):
             self.assertFalse(manifest["forms"]["SSA-16"]["complete_question_coverage"])
             self.assertNotIn("source_dir", manifest)
 
+    def test_download_manifest_corroborates_source_hash_and_url(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "ssa-16-bk.pdf"
+            make_blank_pdf(path)
+            file_hash = audit.hashlib.sha256(path.read_bytes()).hexdigest()
+            (root / "manifest.tsv").write_text(
+                "filename\tsha256\tbytes\tsource\n"
+                f"ssa-16-bk.pdf\t{file_hash}\t{path.stat().st_size}\t"
+                f"{audit.FORM_URLS['SSA-16']}\n", encoding="utf-8"
+            )
+            inventory = audit.audit_dir(root, require_download_manifest=True)
+            self.assertTrue(inventory["missing"])  # other official forms absent
+            self.assertNotIn("SSA-16", inventory["errors"])
+            self.assertEqual(
+                inventory["forms"]["SSA-16"]["source_verification"],
+                "MATCHES_LOCAL_HTTPS_DOWNLOAD_MANIFEST_EDITION_NOT_VISUALLY_VERIFIED"
+            )
+            # Changing bytes without changing the download manifest is blocked.
+            make_blank_pdf(path, label="2.A. Corrected fictional item")
+            broken = audit.audit_dir(root, require_download_manifest=True)
+            self.assertIn("SSA-16", broken["errors"])
+            self.assertNotIn("SSA-16", broken["forms"])
+
+    def test_require_manifest_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ssa-16-bk.pdf"
+            make_blank_pdf(path)
+            manifest = audit.audit_dir(Path(directory), require_download_manifest=True)
+            self.assertIn("download_manifest", manifest["errors"])
+            self.assertEqual(
+                manifest["forms"]["SSA-16"]["source_verification"],
+                "NO_DOWNLOAD_MANIFEST_OFFICIAL_SOURCE_UNCONFIRMED"
+            )
+
     def test_invalid_pdf_symlink_and_unrecognized_form_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / "ssa-16-bk.pdf"
