@@ -65,7 +65,7 @@ SSA_ONLY_CUE = re.compile(
 # Detect printed edition labels on any page; SSA sometimes serves a PDF with
 # inconsistent per-page edition markers (observed in SSA-3373 previously).
 EDITION_CUE = re.compile(
-    r"\\bSSA[- ]?\\d{1,4}(?:[- ][A-Z]{1,3})?\\s*\\(\\d{1,2}[-/]\\d{4}\\)", re.I)
+    r"\bSSA[- ]?\d{1,4}(?:[- ][A-Z]{1,3})?\s*\(\d{1,2}[-/]\d{4}\)", re.I)
 MAX_BYTES = 26 * 1024 * 1024
 MAX_PAGES = 200
 MAX_WIDGETS_PER_PAGE = 750
