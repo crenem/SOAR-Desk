@@ -10,6 +10,7 @@
     "tauri": "tauri",
     "test:forms": "node tests/forms.test.cjs",
     "test:unified": "node tests/unified-interview.test.cjs",
+    "test:interview-navigation": "node tests/interview-first-navigation.test.cjs",
     "test:submissions": "node tests/ssa-submissions.test.cjs",
     "test:package": "node tests/application-package.test.cjs",
     "test:fields": "node tests/field-prefill.test.cjs",
