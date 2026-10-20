@@ -31,11 +31,12 @@ type Props={onCaseChange?:(ref:string)=>void;onCaseModeChange?:(syntheticOnly:bo
 
 export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,prefill=[],onPrefillApplied,onProgress,navigate,stageJump,inboundEvidence,onEvidenceReceived}:Props){
  const [programs,setPrograms]=useState<Program[]>(["ssi","ssdi"]);
- // Sidebar stage switch stays independent of per-form missing-field navigation.
- useEffect(()=>{if(stageJump?.token)setView(stageJump.view);},[stageJump?.token]);
+
  const [formId,setFormId]=useState<FormId>("SSA-3368-BK");
  const [section,setSection]=useState("identity");
  const [view,setView]=useState<View>("unified");
+ // Sidebar stage switch stays independent of per-form missing-field navigation.
+ useEffect(()=>{if(stageJump?.token)setView(stageJump.view);},[stageJump?.token]);
  const [domainId,setDomainId]=useState("person");
  const [answers,setAnswers]=useState<Answers>({});
  const [rows,setRows]=useState<Rows>({});
