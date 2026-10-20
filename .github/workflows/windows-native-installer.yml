@@ -23,6 +23,11 @@ jobs:
         run: cargo test -p soar-native-store
       - name: Compile Rust/Slint Windows application
         run: cargo build --release -p soar-desk
+      - name: Windows upload and persistence smoke test
+        shell: pwsh
+        run: |
+          & .\\target\\release\\soar-desk.exe --smoke-import
+          if ($LASTEXITCODE -ne 0) { throw "Native upload smoke test failed: $LASTEXITCODE" }
       - name: Acquire published llama.cpp Windows CPU engine
         shell: pwsh
         run: |
