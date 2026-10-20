@@ -1,6 +1,6 @@
 ; SOAR Desk per-user Windows installer. Case data lives outside the app install folder.
 #define MyAppName "SOAR Desk"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.1.1-preview.1"
 #define MyAppExeName "soar-desk.exe"
 [Setup]
 AppId={{8D24D86B-B0B0-48AC-8306-5DBD8BE149F4}
