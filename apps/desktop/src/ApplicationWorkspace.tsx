@@ -26,11 +26,13 @@ const statuses:{value:AnswerStatus;label:string}[]=[
 const display=(s:Response|undefined)=>s?.status==="unknown"?"Unknown":s?.value || "Not collected";
 const fieldsOf=(rows:Rows,key:string)=>rows[key]??[];
 type View="unified"|"overview"|"interview"|"review"|"evidence"|"package"|"submissions"|"casefiles"|"signatures";
-type Props={onCaseChange?:(ref:string)=>void;onCaseModeChange?:(syntheticOnly:boolean)=>void;prefill?:PrefillSuggestion[];onPrefillApplied?:()=>void;onProgress?:(items:FormCoverage[])=>void;navigate?:{target:MissingTarget;token:number}|null;inboundEvidence?:{source:AttachedSource;caseReference:string;sequence:number;documentReview?:DocumentReviewRecord}|null;onEvidenceReceived?:()=>void};
+type Props={onCaseChange?:(ref:string)=>void;onCaseModeChange?:(syntheticOnly:boolean)=>void;prefill?:PrefillSuggestion[];onPrefillApplied?:()=>void;onProgress?:(items:FormCoverage[])=>void;navigate?:{target:MissingTarget;token:number}|null;stageJump?:{view:"unified"|"package";token:number}|null;inboundEvidence?:{source:AttachedSource;caseReference:string;sequence:number;documentReview?:DocumentReviewRecord}|null;onEvidenceReceived?:()=>void};
 
 
-export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,prefill=[],onPrefillApplied,onProgress,navigate,inboundEvidence,onEvidenceReceived}:Props){
+export default function ApplicationWorkspace({onCaseChange,onCaseModeChange,prefill=[],onPrefillApplied,onProgress,navigate,stageJump,inboundEvidence,onEvidenceReceived}:Props){
  const [programs,setPrograms]=useState<Program[]>(["ssi","ssdi"]);
+ // Sidebar stage switch stays independent of per-form missing-field navigation.
+ useEffect(()=>{if(stageJump?.token)setView(stageJump.view);},[stageJump?.token]);
  const [formId,setFormId]=useState<FormId>("SSA-3368-BK");
  const [section,setSection]=useState("identity");
  const [view,setView]=useState<View>("unified");
